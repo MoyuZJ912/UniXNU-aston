@@ -45,6 +45,8 @@ __pycache__/
 *.metallib
 *.bin
 !policies/**/*.bin
+# The signed root-policy headers of the OS profiles (build-sheng-source-storage.py --policy-dir).
+!scripts/policies/**/*.bin
 !firmware/**/*.bin
 firmware/wcn7850/*.bin
 *.mbn
