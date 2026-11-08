@@ -23,7 +23,8 @@ MIB = 1 << 20
 
 
 def adb(args, *cmd, capture=True, binary=False):
-    result = subprocess.run([args.adb, '-s', SERIAL, *cmd], capture_output=capture, check=True)
+    # adb never reads this script's stdin: `adb shell` would otherwise consume the typed confirmation.
+    result = subprocess.run([args.adb, '-s', SERIAL, *cmd], capture_output=capture, check=True, stdin=subprocess.DEVNULL)
     return result.stdout if binary else result.stdout.decode().strip() if capture else None
 
 
