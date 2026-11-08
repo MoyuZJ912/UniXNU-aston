@@ -86,24 +86,27 @@ title = "iPadOS"
 dram_size = "0x80000000"
 skip_setup_tool = "scripts/seed-data-skip-setup.py"
 panic_screen = true
-# First-test arguments: CPU display through the firmware framebuffer (offline-legacy-*), S3910 touch (sheng-touch=4,
-# sheng-touch-hid=1), PMIC keys (sheng-buttons=1), all CPUs (sheng-smp=1), CPU frequency scaling (sheng-cpufreq=4), the persistent
-# Data store and the diagnostic log at the end of unixnu (sheng-data-persist=2, sheng-log=1). Left out until each is checked on the
-# device, added with --kernel-arg:
-#   sheng-backlight=1            DCS brightness through DSI0
-#   sheng-battery=2              the pack's fuel gauge (bq28z610 on QUP2 SE0, read only, no DSP) as IOPMPowerSource
-#   sheng-gpu-power=9 sheng-gpu-metal=1 sheng-fb-gpu=1 sheng-fb-bgra=1 sheng-gpu-dcvs=1 sheng-gpu-addon=1
-#                                Adreno 740 and the Metal -> Vulkan addon (needs the macOS-built addon and the aston ZAP image)
-#   sheng-adsp, sheng-audio, sheng-wifi, sheng-bluetooth, sheng-usb   not ported to this board yet
+# Second test (2026-11-08). The first boot reached SpringBoard on the CPU display path: touch worked; the UI was slow, backboardd
+# aborted and its render clients crashed in a loop, the wallpaper was missing (it comes with the GPU addon), the battery level was a
+# placeholder, and scale 2 gave 632x1390 points, narrower than any iPad. These arguments add the Adreno 740 (the phone's own ZAP image,
+# scripts/data/aston-gpu-inputs.json) with GPU frames written straight into the firmware framebuffer (sheng-fb-gpu=1; not the reference
+# board's DPU scanout, sheng-dpu-scanout, which programs its own panel), the Metal -> Vulkan addon with the wallpapers
+# (sheng-gpu-addon=1), the pack's fuel gauge (sheng-battery=2: bq28z610 on QUP2 SE0, read only) and scale 3 (421x927 points, the
+# physical size of an iPhone at 3x on this 452 ppi panel). The payload menu (.github/workflows/package.yml) also offers the same boot
+# at scale 2 and the first test's CPU display path, for comparison and as a fallback.
+# Not ported to this board yet: sheng-backlight (DCS brightness through the Iris7P bridge), sheng-adsp, sheng-audio, sheng-wifi,
+# sheng-bluetooth, sheng-usb.
 kernel_args = [
   "-v", "serial=3", "debug=0x14e", "kt_fixed_zones=120", "-no_slto_panic", "use_contiguous_hint=0",
   "native-source-storage=1", "native-ufs-root=1",
   "offline-mobile-graphics-load=1", "offline-mobile-graphics-client=1", "offline-legacy-register=1", "offline-legacy-gop=1",
-  "offline-legacy-unit-scale=2", "offline-legacy-pm=1", "offline-legacy-validate=1", "offline-legacy-transfer=1",
+  "offline-legacy-unit-scale=3", "offline-legacy-pm=1", "offline-legacy-validate=1", "offline-legacy-transfer=1",
   "offline-legacy-cpu-present=1", "offline-legacy-phase=4", "offline-key-events=1",
   "sheng-aks=1", "offline-hid-input=1", "offline-hid-home=1",
   "sheng-touch=4", "sheng-touch-hid=1", "sheng-buttons=1", "sheng-log=1",
   "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "sheng-data-persist=2", "sheng-cpufreq=4",
+  "sheng-gpu-power=9", "sheng-gpu-metal=1", "sheng-fb-gpu=1", "sheng-fb-bgra=1", "sheng-gpu-dcvs=1", "sheng-gpu-addon=1",
+  "sheng-battery=2",
   "sheng-no-lc=1", "sheng-vsync=60", "sheng-vsync-fixed=1", "sheng-disable-watchdogd=1", "sheng-lite=1",
 ]
 

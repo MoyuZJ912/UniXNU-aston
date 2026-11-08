@@ -6,7 +6,8 @@ Refuses unless all of these hold: the phone is in TWRP over adb with the expecte
 userdata is sda14 and is not the target; nothing on sda15 is mounted; the image fits. Before writing, the region the image
 covers is identified: all zero, or a --known image on this PC followed by zeros (nothing to save), or else it is streamed back
 to this PC. The image is written in 1 GiB pieces (a root image of 16 GB does not fit TWRP's /tmp): each is pushed, checked on
-the phone, and written by dd at its offset; then the whole region is read back on the phone and its SHA-256 compared. Nothing else is written;
+the phone, and written by dd at its offset (a piece the partition already holds is skipped); then the whole region is read
+back on the phone and its SHA-256 compared. Nothing else is written;
 Android's userdata is never opened. Large images are hashed and sent in pieces, never held in memory.
 
 usage: flash-unixnu-image.py --adb ADB [--known FILE ...] IMAGE        (asks for the confirmation "<serial> unixnu write")
@@ -131,6 +132,11 @@ def main():
                     data = stream.read(MIB)
                     piece.update(data)
                     out.write(data)
+            # A piece unixnu already holds is not written again: a new payload changes the manifest block and the Payload object,
+            # not the OS windows, so an update writes two pieces instead of fifteen. The full readback below still covers all.
+            if region_sha256(args, offset // MIB, length // MIB) == piece.hexdigest():
+                print(f'unchanged {offset + length >> 20}/{size >> 20} MiB', flush=True)
+                continue
             adb(args, 'push', str(local), remote)
             if shell(args, f'sha256sum {remote}').split()[0] != piece.hexdigest():
                 shell(args, f'rm -f {remote}')

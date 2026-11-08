@@ -6,7 +6,11 @@ publishes it instead of the firmware's own menu), so it must keep the way back t
 default after 3 s and has no "Switch to slot B". The new menu keeps the generated iOS entries unchanged (kernel, initrd,
 arguments, the install confirmation) and adds the firmware's slot switch, which is the default after 10 s.
 
-usage: aston-payload-menu.py payload.img [--timeout 10] [--default slot-b]
+--variant 'ID|TITLE|EDITS' adds an entry after "xnu" that boots the same kernel and Data with changed arguments, so one image
+can compare settings on the device. EDITS are space separated: KEY=VALUE sets (or replaces) KEY, !KEY drops it (and must name
+an argument the generated entry has). Nothing else of the entry changes.
+
+usage: aston-payload-menu.py payload.img [--timeout 10] [--default slot-b] [--variant 'ID|TITLE|EDITS' ...]
 Prints the SHA-256 of the rewritten volume; writes payload.img.menu.json beside it.
 """
 import argparse
@@ -45,11 +49,29 @@ def table(name, items):
     return '\n'.join(lines) + '\n'
 
 
+def edit_args(line, edits):
+    words = line.split()
+    for edit in edits.split():
+        if edit.startswith('!'):
+            key = edit[1:]
+            if not any(w.split('=', 1)[0] == key for w in words):
+                raise SystemExit(f'a variant drops {key}, which the generated arguments do not have')
+            words = [w for w in words if w.split('=', 1)[0] != key]
+        else:
+            key = edit.split('=', 1)[0]
+            if any(w.split('=', 1)[0] == key for w in words):
+                words = [edit if w.split('=', 1)[0] == key else w for w in words]
+            else:
+                words.append(edit)
+    return ' '.join(words)
+
+
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('image', type=Path)
     parser.add_argument('--timeout', type=int, default=10)
     parser.add_argument('--default', default='slot-b', choices=('slot-b', 'xnu'))
+    parser.add_argument('--variant', action='append', default=[], metavar="'ID|TITLE|EDITS'")
     args = parser.parse_args()
     env = dict(os.environ, MTOOLS_SKIP_CHECK='1', TZ='UTC')
     text = subprocess.run(['mtype', '-i', str(args.image), CONFIG], env=env, check=True, capture_output=True).stdout
@@ -70,6 +92,10 @@ def main():
     out += table('kits', generated.get('kits', {'autoload': False})) + '\n'
     for entry in entries:
         out += table('[entry]', entry) + '\n'
+        if entry.get('id') == 'xnu':
+            for spec in args.variant:
+                vid, title, edits = spec.split('|', 2)
+                out += table('[entry]', dict(entry, id=vid, title=title, args=edit_args(entry['args'], edits))) + '\n'
     out += table('[entry]', {'id': 'slot-b', 'title': 'Switch to slot B', 'type': 'efi', 'path': SLOT_SWITCH}) + '\n'
     out += table('[entry]', {'id': 'shutdown', 'title': 'Power off', 'type': 'action', 'action': 'shutdown'})
     check = tomllib.loads(out)
