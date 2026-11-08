@@ -1,0 +1,12 @@
+{
+  "comment": "OnePlus Ace 3 (PJE110) GPU firmware the kernel embeds in place of the reference board's. The ZAP shader is signed by the phone maker and authenticated by TrustZone (PAS), so only the phone's own image runs. Fill bytes and sha256 from scripts/pull-aston-gpu-firmware.sh; the file itself stays under .cache/firmware/aston-gpu and never enters the repository. With sha256 null the kernel carries an empty ZAP image and the GPU stops at its ZAP step.",
+  "firmware": {
+    "files": {
+      "qcom/sm8550/aston/a740_zap.mbn": {
+        "bytes": null,
+        "sha256": null,
+        "source": "PJE110 ColorOS 15.0.0.870(CN01) /vendor/firmware/a740_zap.mbn, or a740_zap.mdt with its .bNN segments joined into one ELF"
+      }
+    }
+  }
+}

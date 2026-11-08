@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: BSD-3-Clause
+// OnePlus Ace 3 PJE110 (aston, project 23801). Hardware description for XNU's ADT; the boot image carries the firmware DTB.
+// Sources: OnePlusOSS/android_kernel_modules_and_devicetree_oneplus_sm8550 oneplus/sm8550_v_15.0.0_ace_3 4498f99b
+// (aston-23801-kalama-overlay.dts, tp/aston-oplus_tp-23801.dtsi, display aston-23801-display-kalama-overlay.dtsi),
+// Mu-Silicium astonPkg MemoryMapLib.c and the UniXNU-pje110 measurements of a PJE110 16 GiB unit.
+/dts-v1/;
+/include/ "sm8550.dtsi"
+
+/ {
+    model = "OnePlus Ace 3 PJE110";
+    compatible = "oneplus,aston", "oneplus,pje110", "qcom,sm8550";
+
+    // Handoff window as on the reference board: DarwinBoot owns its kernel window through UEFI AllocatePages (owned_memory_size).
+    memory@80000000 {
+        device_type = "memory";
+        reg = <0 0x80000000 0 0x80000000>;
+    };
+
+    reserved-memory {
+        #address-cells = <2>;
+        #size-cells = <2>;
+        ranges;
+        // Mu-Silicium astonPkg "Display Reserved": the framebuffer ABL lit and UEFI's GOP keeps scanning out.
+        splash_region: framebuffer@b8000000 {
+            label = "cont_splash_region";
+            reg = <0 0xb8000000 0 0x2b00000>;
+            no-map;
+        };
+    };
+};
+
+// SM8550 topology, same as the reference: cpu0-2 Cortex-A510 (E), cpu3-4 A715, cpu5-6 A710, cpu7 X3.
+&cpu0 { unixnu,cluster-type = "E"; };
+&cpu1 { unixnu,cluster-type = "E"; };
+&cpu2 { unixnu,cluster-type = "E"; };
+&cpu3 { unixnu,cluster-type = "P"; };
+&cpu4 { unixnu,cluster-type = "P"; };
+&cpu5 { unixnu,cluster-type = "P"; };
+&cpu6 { unixnu,cluster-type = "P"; };
+&cpu7 { unixnu,cluster-type = "P"; };
+&ufs { status = "okay"; };
+&ufsphy { status = "okay"; };
+&gpu { status = "okay"; };
+&gmu { status = "okay"; };
+&gpu_smmu { status = "okay"; };

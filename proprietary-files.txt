@@ -1,0 +1,10 @@
+# Firmware paths and SHA-256 digests for scripts/extract-files.py.
+# Files are written under .cache/firmware/.
+# Format: path|sha256. Prefix a path with - for an optional file.
+#
+# OnePlus Ace 3 (aston). The S3910 touch controller keeps its firmware in its own flash: the reference board's Novatek
+# image is not used. The GPU's GMU and SQE images are the reference pins of UniXNU scripts/data/adreno-inputs.json.
+#
+# GPU ZAP shader, signed by OnePlus: read from the phone with scripts/pull-aston-gpu-firmware.sh into
+# .cache/firmware/aston-gpu/qcom/sm8550/aston/a740_zap.mbn and pinned in scripts/data/aston-gpu-inputs.json
+# (source: PJE110 ColorOS 15.0.0.870(CN01) /vendor/firmware/a740_zap.*). Not fetched by extract-files.py.

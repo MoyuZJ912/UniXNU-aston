@@ -1,0 +1,10 @@
+# Driver checkouts the board build needs, pinned at the commits UniXNU-sheng 689400177f93219a38bd7cf5ae2e9f5782adc594 records as
+# its submodules. They are cloned on the Linux build host only (scripts/fetch-aston-drivers.sh): some driver trees carry file names
+# Windows cannot hold. drivers/ShengUfs is not listed: this repository carries its own modified copy (root partition "unixnu").
+# path                       url                                              commit
+drivers/Ath12kWifi           https://github.com/UniXNU/Ath12kWifi.git         28de7b91d7a880682b777e0e3564245a99dbc3f5
+drivers/QcaBluetooth         https://github.com/UniXNU/QcaBluetooth.git       22ff97f93416452335bb61badb14c762da653487
+drivers/QcomDwc3             https://github.com/UniXNU/QcomDwc3.git           e4efe95c903a737e0f5955e5b50a8fb4d2a7d718
+drivers/ShengHidInput        https://github.com/UniXNU/ShengHidInput.git      71a40e76daeae1bb4127546f96ffa7339c7a06ff
+drivers/ShengNovatekTouch    https://github.com/UniXNU/ShengNovatekTouch.git  3b44b1b7603eaadae942ea44ddc51bdcc48ad060
+drivers/ShengPreflight       https://github.com/UniXNU/ShengPreflight.git     9cfc8d2c8d77f2008ba228fa6eff83d2c7ab7fd2

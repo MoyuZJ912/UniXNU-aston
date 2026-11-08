@@ -1,0 +1,11 @@
+name: Device documentation
+
+# Manual only until porting.toml is rewritten for aston (it still holds the reference board's record).
+on: [workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  porting-record:
+    uses: UniXNU/UniXNU/.github/workflows/porting-record.yml@main

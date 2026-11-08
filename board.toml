@@ -1,0 +1,182 @@
+schema_version = 2
+
+# OnePlus Ace 3 PJE110 (project 23801, OnePlus board name "aston"), SM8550-AB, 16 GiB / 512 GiB, ColorOS 15.0.0.870(CN01).
+# Derived from UniXNU-sheng 689400177f93219a38bd7cf5ae2e9f5782adc594 (Xiaomi Pad 6S Pro, the reference SM8550 board) and its
+# iPadOS 27.0.1 (24A446) chain. The iPadOS 17 chain of that board needs prelinked candidate kernels qualified on sheng hardware
+# (scripts/audit-mobile-graphics-legacy.py), which no other board can produce, so this board follows the 27 chain.
+# The package keeps the reference kit name "sheng" (installed as kits/sheng) and the "sheng-*" boot argument names: the shared
+# scripts and drivers address the board kit by that name.
+[board]
+name = "aston"
+soc = "SM8550"
+description = "OnePlus Ace 3 PJE110"
+kit = "sheng"
+soc_source = "sm8550"
+os_profile = "ipados-27.0.1-24A446"
+
+# The iOS partition carved from the end of Android's userdata (dual_sys plan-32g, sda15, 32 GiB). ShengUfs is built to match the
+# GPT name "unixnu" only (drivers/ShengUfs/RootLayout.h); Android's userdata is never opened. The image file keeps the upstream
+# name userdata-root.img; it is written to unixnu, never to userdata.
+[userdata]
+partition = "unixnu"
+first_lba = 115424000
+last_lba = 123812607
+lba_bytes = 4096
+
+[kernel]
+defconfig = "aston_ipados27_defconfig"
+config_fragments = ["arch:configs/common.config", "os:configs/ipados.config"]
+patch_series = ["arch:patches/xnu/series", "soc:patches/xnu-12377/series", "os:patches/xnu/series", "device:patches/xnu-12377/series"]
+# The reference 24A446 archive chain. build-gop-legacy-display-27.py builds the board objects (touch, keys, brightness, battery,
+# CPU frequency, GPU power) and links them against the original families of this fileset. fetch-sheng-dts.py and the prepare-sheng-*
+# generators still read the reference board's devicetree for the GPU inputs (the same kalama GPU and GMU nodes).
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "component:ArmDTPlatform",
+  "component:ArmCpu",
+  "build-libpthread-kernel.py",
+  "component:ShengUfs",
+  "build-sheng-source-storage.py --policy-dir scripts/policies/ipados-27.0.1-24A446",
+  "component:RamBlock",
+  "component:Adreno740",
+  "fetch-sheng-dts.py",
+  "fetch-adreno-inputs.py",
+  "prepare-sheng-gmu.py",
+  "prepare-sheng-gpu-smmu.py",
+  "prepare-sheng-gmu-votes.py",
+  "build-adreno740-kits.py",
+  "build-adreno740-accelerator.py",
+  "component:AppleKeyStoreState",
+  "build-gop-legacy-display-27.py",
+  "build-fileset-release-reference.py --tree . --lto",
+]
+
+[kernel.prelink]
+# The profile's roots plus the USB device and host stacks (the reference board's list; the SoC's USB controller is the same).
+roots = [
+  "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib", "com.apple.driver.AppleARMPlatform", "com.apple.driver.AppleARMWatchdogTimer",
+  "com.apple.driver.AppleAudioClockLibs", "com.apple.driver.AppleEffaceableStorage", "com.apple.driver.AppleIISController",
+  "com.apple.driver.AppleM2ScalerCSCDriver", "com.apple.driver.AppleMobileFileIntegrity", "com.apple.driver.ApplePMGR",
+  "com.apple.driver.IODARTFamily", "com.apple.filesystems.apfs", "com.apple.iokit.CoreAnalyticsFamily", "com.apple.iokit.IOAVFamily",
+  "com.apple.iokit.IOAudio2Family", "com.apple.iokit.IOCECFamily", "com.apple.iokit.IOCryptoAcceleratorFamily",
+  "com.apple.iokit.IOGPUFamily", "com.apple.iokit.IOHDCPFamily", "com.apple.iokit.IOMobileGraphicsFamily",
+  "com.apple.iokit.IOReportFamily", "com.apple.iokit.IOSlowAdaptiveClockingFamily", "com.apple.iokit.IOStorageFamily",
+  "com.apple.iokit.IOSurface", "com.apple.kec.Libm", "com.apple.kec.corecrypto", "com.apple.kext.AppleMatch", "com.apple.kext.CoreTrust",
+  "com.apple.security.AppleImage4", "com.apple.security.sandbox", "com.apple.iokit.IOHIDFamily", "com.apple.iokit.IOHIDEventDriver",
+  "com.apple.iokit.IOUSBDeviceFamily", "com.apple.driver.AppleUSBXDCI", "com.apple.driver.AppleUSBDeviceMux",
+  "com.apple.iokit.IOUSBHostFamily", "com.apple.driver.usb.AppleUSBXHCI", "com.apple.driver.usb.AppleUSBHub",
+  "com.apple.driver.usb.AppleUSBHostCompositeDevice", "com.apple.driver.usb.IOUSBHostHIDDevice", "com.apple.iokit.IOUSBMassStorageDriver",
+  "com.apple.iokit.IOSCSIArchitectureModelFamily", "com.apple.iokit.IOSCSIBlockCommandsDevice",
+  "!com.apple.driver.AppleOnboardSerial", "!com.apple.driver.AppleSMC",
+]
+
+[firmware]
+# Not used: the Ace 3 firmware is Mu-Silicium "aston", built by Ace3-UniXNU/scripts/build-ram-probe.sh.
+config = "aston"
+dsc = "Platforms/OnePlus/astonPkg/aston.dsc"
+fd = "Build/astonPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
+
+[payload]
+volume = "ASTONESP"
+size_mib = 176
+root_policies = "{tree}/build/sheng-source-storage/root-policies.bin"
+loader = "firmware"
+title = "iPadOS"
+dram_size = "0x80000000"
+skip_setup_tool = "scripts/seed-data-skip-setup.py"
+panic_screen = true
+# First-test arguments: CPU display through the firmware framebuffer (offline-legacy-*), S3910 touch (sheng-touch=4,
+# sheng-touch-hid=1), PMIC keys (sheng-buttons=1), all CPUs (sheng-smp=1), CPU frequency scaling (sheng-cpufreq=4), the persistent
+# Data store and the diagnostic log at the end of unixnu (sheng-data-persist=2, sheng-log=1). Left out until each is checked on the
+# device, added with --kernel-arg:
+#   sheng-backlight=1            DCS brightness through DSI0
+#   sheng-battery=2              the pack's fuel gauge (bq28z610 on QUP2 SE0, read only, no DSP) as IOPMPowerSource
+#   sheng-gpu-power=9 sheng-gpu-metal=1 sheng-fb-gpu=1 sheng-fb-bgra=1 sheng-gpu-dcvs=1 sheng-gpu-addon=1
+#                                Adreno 740 and the Metal -> Vulkan addon (needs the macOS-built addon and the aston ZAP image)
+#   sheng-adsp, sheng-audio, sheng-wifi, sheng-bluetooth, sheng-usb   not ported to this board yet
+kernel_args = [
+  "-v", "serial=3", "debug=0x14e", "kt_fixed_zones=120", "-no_slto_panic", "use_contiguous_hint=0",
+  "native-source-storage=1", "native-ufs-root=1",
+  "offline-mobile-graphics-load=1", "offline-mobile-graphics-client=1", "offline-legacy-register=1", "offline-legacy-gop=1",
+  "offline-legacy-unit-scale=2", "offline-legacy-pm=1", "offline-legacy-validate=1", "offline-legacy-transfer=1",
+  "offline-legacy-cpu-present=1", "offline-legacy-phase=4", "offline-key-events=1",
+  "sheng-aks=1", "offline-hid-input=1", "offline-hid-home=1",
+  "sheng-touch=4", "sheng-touch-hid=1", "sheng-buttons=1", "sheng-log=1",
+  "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "sheng-data-persist=2", "sheng-cpufreq=4",
+  "sheng-no-lc=1", "sheng-vsync=60", "sheng-vsync-fixed=1", "sheng-disable-watchdogd=1", "sheng-lite=1",
+]
+
+[payload.runtime]
+tool = "scripts/build-boot-runtime.py"
+target = "ios27"
+build = "24A446"
+# The Data volume inside unixnu after the OS root windows and the log; set from `unixnu build userdata --dry-run`.
+data_gib = 8
+skip_setup = true
+trust_components = ["StaticTrustCache", "Cryptex1,SystemTrustCache", "Cryptex1,AppTrustCache"]
+wallpapers = ["ipados27", "ipados27-floating"]
+
+[payload.runtime.launchd_job_environment."com.apple.iconservices.iconservicesagent"]
+FORCE_SOFTWARE_RENDERER = "0"
+CI_ENABLE_METAL_GPU = "0"
+
+[payload.install]
+title = "Install and boot"
+confirm = "ERASE all iPadOS user data and install again?"
+confirm_titles = ["Erase Data, skip Hello, boot", "Erase Data, show Hello, boot"]
+confirm_args = ["sheng-data-reset=1", "sheng-data-reset=2"]
+
+[payload.adt]
+chip_id = "8142"
+owned_memory_size = "0x130000000"
+packed_data_ramdisk = true
+persistent_data = true
+unique_chip_id = "required"
+
+[bootimg]
+# The Mu-Silicium aston DTB that Ace3-UniXNU packs (out/phone/firmware.dtb, /chosen initrd keys removed). Mu-Silicium aston
+# reserves the same splash range as sheng: "Display Reserved" 0xB8000000 + 0x2B00000 (astonPkg MemoryMapLib.c).
+dtb = "../Ace3-UniXNU/out/phone/firmware.dtb"
+dtb_node = [{ path = "/reserved-memory/splash_region", props = [{ name = "label", type = "s", value = "cont_splash_region" }, { name = "reg", type = "x", value = ["0x0", "0xb8000000", "0x0", "0x2b00000"] }] }]
+
+[device_tree]
+source = "device:dts/aston.dts"
+include_dirs = ["soc:dts"]
+
+[components]
+include = ["ArmDTPlatform", "ArmCpu", "XnuPrelink", "DarwinBoot", "ShengPreflight", "ShengUfs", "RamBlock", "GopFramebuffer", "AppleKeyStoreState", "Adreno740", "AdrenoMetal"]
+
+[adt.product.string]
+model = "J120AP"
+artwork-display-gamut = "sRGB"
+
+[adt.product.u32]
+thin-bezel = 1
+
+[adt.defaults.u32]
+sleep-disabled = 1
+# No Apple PMGR or SEP: report a virtual platform, so AMFI does not wait for an ApplePMGRNub (as the reference board).
+vmm-present = 1
+# memory/64K + 1024 for the owned 4864 MiB (the reference value).
+"kern.maxvnodes" = 78848
+
+[adt.chosen.u32]
+# SM8550 has no CTRR.
+kernel-ctrr-to-be-enabled = 0
+
+[adt.buttons.string]
+compatible = "buttons"
+device_type = "buttons"
+
+[adt.buttons.strings]
+button-names = ["hold", "voldown", "volup"]
+
+[adt.buttons.u32]
+home-button-type = 2
+
+[package]
+unixnu = "../UniXNU"
+
+[package.defconfig]
+"ipados-27.0.1-24A446" = "aston_ipados27_defconfig"

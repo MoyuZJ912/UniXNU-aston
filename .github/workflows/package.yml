@@ -1,0 +1,164 @@
+name: package
+
+# The OnePlus Ace 3 (aston) iPadOS 27 kernel and payload on a macOS runner: the 24A446 kernel (xnu-12377) needs Xcode's clang, and the
+# Data seed, the Metal plugin (Mesa Turnip + metal2vulkan, scripts/build-adreno-metal-plugin.py --target ios27 through the payload
+# runtime) and their owner trust bundle need macOS tools. The firmware and the boot image are not built here: the Ace 3 runs the
+# Mu-Silicium "aston" firmware of Ace3-UniXNU, which packs its own boot image.
+#
+# The platform seed comes from the repository secret UNIXNU_UNIQUE_CHIP_ID and is baked into the payload, so the run's artifacts belong
+# to one device alone: download them, then delete the run. The Ace 3's own Adreno ZAP image (scripts/pull-aston-gpu-firmware.sh) may be
+# given as the base64 secret ASTON_A740_ZAP_B64; it must match the pin in scripts/data/aston-gpu-inputs.json. Without it the kernel
+# carries an empty ZAP image and the GPU stays off.
+
+on:
+  workflow_dispatch:
+    inputs:
+      init_data:
+        description: "Create a NEW installation seed if no saved seed exists"
+        type: boolean
+        default: false
+      data_seed_url:
+        description: "Optional original data.dbr URL for an existing installation; otherwise use the saved cache"
+        type: string
+      data_seed_sha256:
+        description: "Required SHA-256 when data_seed_url is supplied"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WORK: UniXNU/out/aston/ipados-27.0.1-24A446/aston_ipados27
+
+jobs:
+  package:
+    runs-on: macos-26
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: UniXNU-aston
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          ref: 82b847c4ac3f68a57024b3082ffa3a03442defd9
+          path: UniXNU
+          submodules: recursive
+      - name: tools
+        run: |
+          brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
+          {
+            echo "$HOME/.cargo/bin"
+            echo "/opt/homebrew/opt/llvm/bin"
+            echo "/opt/homebrew/opt/lld/bin"
+            echo "/opt/homebrew/opt/bison/bin"
+          } >> "$GITHUB_PATH"
+      - name: driver checkouts
+        run: bash UniXNU-aston/scripts/fetch-aston-drivers.sh UniXNU-aston
+      - name: platform seed
+        env:
+          seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+        run: |
+          [ -n "$seed" ] || { echo "::error::set the repository secret UNIXNU_UNIQUE_CHIP_ID"; exit 1; }
+      - name: Ace 3 ZAP image
+        env:
+          zap: ${{ secrets.ASTON_A740_ZAP_B64 }}
+        run: |
+          if [ -n "$zap" ]; then
+            mkdir -p UniXNU-aston/.cache/firmware/aston-gpu/qcom/sm8550/aston
+            printf '%s' "$zap" | base64 -d > UniXNU-aston/.cache/firmware/aston-gpu/qcom/sm8550/aston/a740_zap.mbn
+          else
+            echo "::warning::no ASTON_A740_ZAP_B64: the kernel carries an empty ZAP image and the GPU stays off"
+          fi
+      - name: seed cache identity
+        id: seed-key
+        env:
+          SEED: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+        run: |
+          echo "key=aston-data-$(printf '%s' "$SEED" | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: data-cache
+        with:
+          path: |
+            ${{ env.WORK }}/runtime/data.dbr
+            ${{ env.WORK }}/runtime/inputs.json
+          key: ${{ steps.seed-key.outputs.key }}
+      - name: prepare preserved Data seed
+        env:
+          INIT_DATA: ${{ inputs.init_data }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, urllib.request
+          inputs = json.loads(pathlib.Path(os.environ['GITHUB_EVENT_PATH']).read_text())['inputs']
+          path = pathlib.Path(os.environ['WORK']) / 'runtime/data.dbr'
+          url, digest = inputs.get('data_seed_url', ''), inputs.get('data_seed_sha256', '').lower()
+          if url:
+              print('::add-mask::' + url)
+              if not url.startswith('https://') or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
+                  raise SystemExit('A seed URL requires HTTPS and its SHA-256')
+              with urllib.request.urlopen(url, timeout=120) as source:
+                  data = source.read(64 * 1024 * 1024 + 1)
+              if len(data) > 64 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != digest:
+                  raise SystemExit('Seed size or SHA-256 mismatch')
+              if path.exists() and path.read_bytes() != data:
+                  raise SystemExit('Saved seed differs; preserve and inspect it instead of replacing this installation')
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_bytes(data)
+          if not path.is_file() and os.environ['INIT_DATA'] != 'true':
+              raise SystemExit('No saved seed. Supply the ORIGINAL seed for an existing installation, or select init_data for a FIRST installation')
+          PY
+      - name: host checks
+        run: |
+          python3 UniXNU-aston/scripts/check-aston-gauge-host.py
+      - name: kernel and payload
+        working-directory: UniXNU
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+          UNIXNU_DEVICE: ${{ github.workspace }}/UniXNU-aston
+          GITHUB_TOKEN: ${{ github.token }}
+          INIT_DATA: ${{ inputs.init_data }}
+        run: |
+          ./unixnu defconfig aston_ipados27_defconfig -D ../UniXNU-aston
+          ./unixnu fetch -D ../UniXNU-aston
+          ./unixnu ipsw fetch -D ../UniXNU-aston
+          ./unixnu build kernel -D ../UniXNU-aston
+          args=()
+          if [ "$INIT_DATA" = true ]; then args+=(--init-data); fi
+          ./unixnu build payload -D ../UniXNU-aston "${args[@]}"
+      - uses: actions/cache/save@v4
+        if: always() && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/aston/ipados-27.0.1-24A446/aston_ipados27/runtime/data.dbr') != ''
+        with:
+          path: |
+            ${{ env.WORK }}/runtime/data.dbr
+            ${{ env.WORK }}/runtime/inputs.json
+          key: ${{ steps.seed-key.outputs.key }}
+      - name: installation seed backup
+        if: always() && hashFiles('UniXNU/out/aston/ipados-27.0.1-24A446/aston_ipados27/runtime/data.dbr') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: installation-seed
+          retention-days: 1
+          path: |
+            ${{ env.WORK }}/runtime/data.dbr
+            ${{ env.WORK }}/runtime/inputs.json
+      - name: logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs
+          retention-days: 3
+          path: ${{ env.WORK }}/logs/*.log
+      - name: images
+        uses: actions/upload-artifact@v4
+        with:
+          name: aston-ipados27
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            ${{ env.WORK }}/kernel/kernel.macho
+            ${{ env.WORK }}/payload/payload.img
+            ${{ env.WORK }}/payload/payload.json
