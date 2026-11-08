@@ -38,6 +38,10 @@ jobs:
   package:
     runs-on: macos-26
     timeout-minutes: 360
+    env:
+      # The Xcode the 24A446 kernel was first built with here (run 42460091603, the image default), and the line UniXNU's own macOS
+      # workflow uses; pinned so an image update does not change the compiler under the build.
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,6 +84,9 @@ jobs:
           done
           [ -f Mu-Silicium/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/Font.h ] || { echo "missing Font.h"; ok=0; }
           [ "$ok" = 1 ]
+          xcodebuild -version
+          echo "iphoneos SDK $(xcrun --sdk iphoneos --show-sdk-version), macosx SDK $(xcrun --sdk macosx --show-sdk-version)"
+          df -h "$GITHUB_WORKSPACE"
       - name: driver checkouts
         run: bash UniXNU-aston/scripts/fetch-aston-drivers.sh UniXNU-aston
       - name: git sparse mode
@@ -150,6 +157,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           INIT_DATA: ${{ inputs.init_data }}
         run: |
+          trap 'df -h . || true' EXIT
           ./unixnu defconfig aston_ipados27_defconfig -D ../UniXNU-aston
           ./unixnu fetch -D ../UniXNU-aston
           ./unixnu ipsw fetch -D ../UniXNU-aston
