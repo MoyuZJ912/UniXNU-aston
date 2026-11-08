@@ -63,8 +63,22 @@ jobs:
           path: Mu-Silicium
           sparse-checkout: Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib
       - name: tools
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
+          # GitHub's release download answered 504 to brew for ipsw's archive in two runs (42464807991, 42470712683): retry, and if
+          # ipsw is still missing take the same archive through the GitHub API, which kept working, checked against its SHA-256.
+          for attempt in 1 2 3; do
+            brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw && break
+            echo "::warning::brew install failed (attempt $attempt)"; sleep 45
+          done
+          if ! command -v ipsw >/dev/null; then
+            dir="$RUNNER_TEMP/ipsw"; archive=ipsw_3.1.743_macOS_arm64_extras.tar.gz
+            gh release download v3.1.743 -R blacktop/ipsw -p "$archive" -D "$dir"
+            echo "c7da3f9fba1901a608e81d06269f4050f60a5b55ebf7418535336bb9c8810eba  $dir/$archive" | shasum -a 256 -c -
+            tar -xzf "$dir/$archive" -C "$dir"
+            echo "$dir" >> "$GITHUB_PATH"; export PATH="$dir:$PATH"
+          fi
           {
             echo "$HOME/.cargo/bin"
             echo "/opt/homebrew/opt/llvm/bin"
