@@ -18,3 +18,5 @@ grep -v '^\s*#' "$DEV/drivers/submodules.lock" | while read -r path url commit; 
   git -C "$dir" submodule update -q --init --recursive --depth 1
   echo "fetch $path $(git -C "$dir" rev-parse HEAD)"
 done
+# Ath12kWifi's own source fetch needs pattern-mode sparse checkouts (scripts/prefetch-ath12k-sources.py).
+python3 "$DEV/scripts/prefetch-ath12k-sources.py" "$DEV/drivers/Ath12kWifi"
