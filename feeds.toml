@@ -1,5 +1,7 @@
+# The SoC source. 97665e28 adds the Sm8550Platform GCC, GENI UART and QUP DMA helpers to a9f45dc6 (the reference board's
+# pin) and changes nothing else; the 24A446 board objects (BluetoothProbe.cpp) include Sm8550GeniUart.h.
 [[source]]
 kind = "soc"
 name = "sm8550"
 git = "https://github.com/UniXNU/UniXNU-sm8550-common.git"
-commit = "a9f45dc60c035084b95463781538380f4c3606c9"
+commit = "97665e28578483082b674e8375a8fa65f4cf49cf"
