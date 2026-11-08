@@ -59,6 +59,10 @@ jobs:
           } >> "$GITHUB_PATH"
       - name: driver checkouts
         run: bash UniXNU-aston/scripts/fetch-aston-drivers.sh UniXNU-aston
+      - name: git sparse mode
+        # Ath12kWifi's tools/fetch-sources.py clones with --sparse and adds root-anchored patterns ("/drivers/..."); the runner's
+        # git starts sparse checkouts in cone mode, which rejects them. Pattern mode takes them as written.
+        run: git config --global core.sparseCheckoutCone false
       - name: platform seed
         env:
           seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
