@@ -50,6 +50,14 @@ jobs:
           ref: 5dc00d201496a1e7a72d1f5db23f041eb94ace1c
           path: UniXNU
           submodules: recursive
+      - uses: actions/checkout@v4
+        # Only the panic-screen font of the payload's entry probe (patch-xnu-entry-probe.py reads it through UNIXNU_UEFI), from
+        # the Mu-Silicium revision Ace3-UniXNU builds the aston firmware from.
+        with:
+          repository: Project-Silicium/Mu-Silicium
+          ref: 6b3d90b79e191e08171bfedd3980234a7e49d340
+          path: Mu-Silicium
+          sparse-checkout: Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib
       - name: tools
         run: |
           brew install dtc llvm lld cmake mtools ninja glslang shaderc spirv-tools bison pkgconf rustup blacktop/tap/ipsw
@@ -59,6 +67,19 @@ jobs:
             echo "/opt/homebrew/opt/lld/bin"
             echo "/opt/homebrew/opt/bison/bin"
           } >> "$GITHUB_PATH"
+          # The Metal runtime build (Mesa Turnip and the translator) needs this Rust toolchain (the reference board's workflow).
+          rustup toolchain install 1.98.0 --profile minimal --component rust-src
+          # Fail fast, naming the tool, before the long build.
+          export PATH="$HOME/.cargo/bin:/opt/homebrew/opt/llvm/bin:/opt/homebrew/opt/lld/bin:/opt/homebrew/opt/bison/bin:$PATH"
+          ok=1
+          for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool mformat mcopy mtype ipsw; do
+            command -v "$t" >/dev/null || { echo "missing tool: $t"; ok=0; }
+          done
+          for t in lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
+            [ -f "/opt/homebrew/opt/llvm/bin/$t" ] || [ -f "/opt/homebrew/opt/lld/bin/$t" ] || { echo "missing tool: $t"; ok=0; }
+          done
+          [ -f Mu-Silicium/Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib/Font.h ] || { echo "missing Font.h"; ok=0; }
+          [ "$ok" = 1 ]
       - name: driver checkouts
         run: bash UniXNU-aston/scripts/fetch-aston-drivers.sh UniXNU-aston
       - name: git sparse mode
@@ -125,16 +146,17 @@ jobs:
         env:
           UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
           UNIXNU_DEVICE: ${{ github.workspace }}/UniXNU-aston
+          UNIXNU_UEFI: ${{ github.workspace }}/Mu-Silicium
           GITHUB_TOKEN: ${{ github.token }}
           INIT_DATA: ${{ inputs.init_data }}
         run: |
           ./unixnu defconfig aston_ipados27_defconfig -D ../UniXNU-aston
           ./unixnu fetch -D ../UniXNU-aston
           ./unixnu ipsw fetch -D ../UniXNU-aston
-          ./unixnu build kernel -D ../UniXNU-aston
+          # One invocation: a new Data seed (--init-data) is made before the kernel, which binds its volume UUID.
           args=()
           if [ "$INIT_DATA" = true ]; then args+=(--init-data); fi
-          ./unixnu build payload -D ../UniXNU-aston "${args[@]}"
+          ./unixnu build kernel payload -D ../UniXNU-aston "${args[@]}"
       - name: Ace 3 menu
         # The payload volume replaces the firmware's menu on this phone: keep "Switch to slot B" as the default.
         run: python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img"
