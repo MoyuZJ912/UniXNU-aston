@@ -129,6 +129,9 @@ jobs:
           args=()
           if [ "$INIT_DATA" = true ]; then args+=(--init-data); fi
           ./unixnu build payload -D ../UniXNU-aston "${args[@]}"
+      - name: Ace 3 menu
+        # The payload volume replaces the firmware's menu on this phone: keep "Switch to slot B" as the default.
+        run: python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img"
       - uses: actions/cache/save@v4
         if: always() && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/aston/ipados-27.0.1-24A446/aston_ipados27/runtime/data.dbr') != ''
         with:
@@ -162,3 +165,4 @@ jobs:
             ${{ env.WORK }}/kernel/kernel.macho
             ${{ env.WORK }}/payload/payload.img
             ${{ env.WORK }}/payload/payload.json
+            ${{ env.WORK }}/payload/payload.img.menu.json
