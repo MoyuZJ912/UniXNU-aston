@@ -2,9 +2,9 @@
 """Build a symbol-bearing RELEASE comparison kernel in an isolated output tree.
 
 aston: the board copy of UniXNU scripts/build-fileset-release-reference.py (82b847c4ac3f68a57024b3082ffa3a03442defd9).
-The xnu-12377 board patches of the reference board (zzzz-sheng-ipados27-bringup.patch and the others) call sheng_* hooks
-from the kernel core; the board archives that define them are not linked into this comparison kernel, so the private copy
-stubs sheng_* names as it stubs native_* ones. Nothing else differs.
+The reference board's xnu-12377 patch sheng-cache-input-diagnostic.patch calls the weak hook boot_cache_input_capture
+(defined in the board's package/BootDiagExport.c, which this comparison kernel does not link): the private copy stubs every
+boot_* name, as UniXNU stubs native_* ones and boot_log_rounds. Nothing else differs.
 """
 import json
 import os
@@ -137,7 +137,7 @@ def main():
     # the authenticated pointer of an undefined weak symbol fails the link. The private copy stubs them: this
     # comparison kernel never runs, the prelink step reads its layout.
     build_log = (output / f'{mode}-build.log').read_text()
-    stub_names = sorted(set(re.findall(r'^\s+"(_(?:native_[a-z0-9_]+|sheng_[a-z0-9_]+|boot_log_rounds))"', build_log, re.M)))
+    stub_names = sorted(set(re.findall(r'^\s+"(_(?:native_[a-z0-9_]+|boot_[a-z0-9_]+))"', build_log, re.M)))
     if stub_names:
         (output / 'native-stubs.c').write_text(''.join(f'long {name[1:]};\n' for name in stub_names))   # the linker names carry the leading underscore
         iphoneos = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
