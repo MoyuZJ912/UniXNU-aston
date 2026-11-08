@@ -158,7 +158,11 @@ jobs:
         with:
           name: logs
           retention-days: 3
-          path: ${{ env.WORK }}/logs/*.log
+          path: |
+            ${{ env.WORK }}/logs/*.log
+            ${{ env.WORK }}/tree/build/xnu/fileset-reference/*/*-build.log
+            ${{ env.WORK }}/tree/build/xnu/fileset-reference/*/native-stubs.c
+            ${{ env.WORK }}/tree/build/xnu/fileset-reference/*/omitted-unavailable-forced-exports.json
       - name: images
         uses: actions/upload-artifact@v4
         with:
