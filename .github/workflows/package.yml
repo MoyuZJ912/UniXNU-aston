@@ -45,7 +45,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: UniXNU/UniXNU
-          ref: 82b847c4ac3f68a57024b3082ffa3a03442defd9
+          # UniXNU main as of 2026-11-07: the reference board's board code needs its ArmCpu (shared SPI dispatch,
+          # armcpu_spi_share/armcpu_spi_mask) and build-sheng-source-storage.py building BluetoothFirmware.c.
+          ref: 5dc00d201496a1e7a72d1f5db23f041eb94ace1c
           path: UniXNU
           submodules: recursive
       - name: tools
