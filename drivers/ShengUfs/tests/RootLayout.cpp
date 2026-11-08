@@ -27,6 +27,8 @@ static IOReturn hostRead4k(uint8_t,uint64_t lba,uint32_t blocks,void *out) {
 #include "../RootLayout.h"
 static void put32(uint8_t *p,uint32_t v) { for(unsigned i=0;i<4;++i)p[i]=uint8_t(v>>(i*8)); }
 static void put64(uint8_t *p,uint64_t v) { for(unsigned i=0;i<8;++i)p[i]=uint8_t(v>>(i*8)); }
+// The GPT name in UTF-16LE; the fixture's root partition takes the name RootLayout.h matches (aston: "unixnu").
+static void name(uint8_t *entry,const char *n) { memset(entry+56,0,72); for(unsigned i=0;n[i];++i)entry[56+2*i]=uint8_t(n[i]); }
 static void checksums() {
   SHA256(manifest,4064,manifest+4064);
   put32(header+88,rootCrc32(entries,32*128));
@@ -39,7 +41,7 @@ static void fixture() {
   put64(header+24,1);put64(header+32,511);put64(header+40,6);put64(header+48,506);
   put64(header+72,2);put32(header+80,32);put32(header+84,128);
   entries[0]=1; entries[16]=2;put64(entries+32,8);put64(entries+40,506);
-  for(unsigned i=0;i<8;++i)entries[56+2*i]="userdata"[i];
+  name(entries,SHENG_UFS_ROOT_PARTITION);
   memcpy(manifest,"SHNGROOT",8);put32(manifest+8,1);put32(manifest+12,2);put64(manifest+16,65536);
   for(unsigned i=0;i<2;++i) {
     uint8_t *e=manifest+24+i*128;strcpy(reinterpret_cast<char *>(e),i?"SystemOS":"OS");
@@ -120,6 +122,26 @@ int main(int argc,char **argv) {
     assert(findRootLayout(&layout,&why) && layout.manifestStatus==0 && layout.windows==2);
     printf("PASS: existing root image's 4096-byte manifest, OS=%llu SystemOS=%llu; synthetic GPT uses recorded geometry, no full-image rehash\n",
            (unsigned long long)layout.window[0].size,(unsigned long long)layout.window[1].size);
+  }
+  if(strcmp(SHENG_UFS_ROOT_PARTITION,"userdata")) {
+    // aston: Android's userdata (F2FS) lies right before the root partition. hostRead4k serves a manifest only at `userdata` (the
+    // root partition's first block) and stops the test on any other block, so these cases also prove Android's blocks are never read.
+    RootLayout layout;const char *why=nullptr;
+    fixture();memcpy(entries+128,entries,128);entries[128+16]=3;
+    name(entries,"userdata");put64(entries+32,8);put64(entries+40,100);
+    name(entries+128,SHENG_UFS_ROOT_PARTITION);put64(entries+128+32,101);put64(entries+128+40,506);
+    userdata=101;checksums();
+    assert(findRootLayout(&layout,&why) && layout.userdataFirst==101 && layout.userdataLast==506);
+    assert(layout.manifestStatus==0 && layout.windows==2);
+    // Only Android's userdata: no root partition, and nothing read past the GPT.
+    fixture();name(entries,"userdata");checksums();userdata=UINT64_MAX;reads=0;
+    assert(!findRootLayout(&layout,&why) && !strcmp(why,"no " SHENG_UFS_ROOT_PARTITION " partition") && reads==2);
+    // The name is matched exactly, NUL included.
+    for(const char *other : {"unixnu2","unixn","UNIXNU"}) {
+      fixture();name(entries,other);checksums();userdata=UINT64_MAX;
+      assert(!findRootLayout(&layout,&why));
+    }
+    printf("PASS: root partition \"%s\" chosen next to Android's userdata, never userdata, exact name only\n",SHENG_UFS_ROOT_PARTITION);
   }
   puts("PASS: GPT CRC/geometry/partition faults, manifest hashes/names/attributes/overlap/overflow, version 2 objects, 2048 bounded mutations");
 }

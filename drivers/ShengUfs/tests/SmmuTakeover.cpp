@@ -22,10 +22,49 @@ int main()
   reset(); r[0x800/4]=0x80000061; r[0xc00/4]=69; r[0x804/4]=0x80000062; r[0xc04/4]=68; r[(128+67)*4096/4]=1; p=plan(); assert(!p.error && p.bank==66);
   reset(); for(unsigned k=0;k<8;++k){r[(0x800+4*k)/4]=0x80000100+k;r[(0xc00+4*k)/4]=69-k;}
   p=plan(); assert(p.error && !__builtin_strcmp(p.error,"reserved context bank already used") && p.bank==69);
-  reset(); r[0x800/4]=0x80000060; r[0xc00/4]=1; assert(plan().error);
+  // aston: the firmware's sole, unmasked entry for our stream on a foreign bank is redirected to our bank (it was refused before).
+  reset(); r[0x800/4]=0x80000060; r[0xc00/4]=1; p=plan(); assert(!p.error && p.redirect && !p.reuse && p.slot==0 && p.bank==69);
+  // The OnePlus Ace 3 hand-off (on-device panic 2026-11-08): slot 2, SMR 0x80000060, S2CR 2.
+  reset(); r[0x808/4]=0x80000060; r[0xc08/4]=2; p=plan();
+  assert(!p.error && p.redirect && p.slot==2 && p.bank==69 && p.smr==0x80000060 && p.s2cr==2);
+  {
+    auto read=[&](unsigned at){return r.at(at/4);};
+    std::vector<std::pair<unsigned,uint32_t>> w;
+    auto write=[&](unsigned at,uint32_t value) {
+      w.emplace_back(at,value); r.at(at/4)=value;
+      if(at==0xc08) {    // the stream moves only once our bank is a VA64 bypass with translation off
+        assert(read(0x1800+4*69)==1 && read(0x1000+4*69)==0x10000 && read((128+69)*4096)==0);
+      }
+    };
+    assert(!configureUfsSmmu(p,0x60,read,write));
+    for(auto &e : w) assert(!(e.first>=0x800 && e.first<0xc00));   // no SMR written: the firmware's entry keeps matching our stream
+    assert(w.back().first==0xc08 && read(0x808)==0x80000060 && read(0xc08)==69);
+    assert(read(0x1000+4*2)==0 && read((128+2)*4096)==0);                      // bank 2 untouched
+    // A later boot (warm reset) finds our own mapping: reused, nothing written.
+    p=plan(); assert(!p.error && p.reuse && !p.redirect && p.slot==2 && p.bank==69);
+    w.clear(); assert(!configureUfsSmmu(p,0x60,read,write) && w.empty());
+    // The S2CR write ignored: refused, the firmware's entry is left as it was.
+    reset(); r[0x808/4]=0x80000060; r[0xc08/4]=2; p=plan();
+    auto dropS2cr=[&](unsigned at,uint32_t value){if(at!=0xc08) r.at(at/4)=value;};
+    assert(configureUfsSmmu(p,0x60,read,dropS2cr) && read(0xc08)==2);
+    // The firmware entry changed between plan and configure: refused before any stream write.
+    reset(); r[0x808/4]=0x80000060; r[0xc08/4]=2; p=plan(); r[0x808/4]=0x80000061;
+    assert(configureUfsSmmu(p,0x60,read,dropS2cr) && read(0xc08)==2);
+  }
+  // Still refused: a masked foreign entry, two entries for our stream, and a redirect whose every candidate bank is held or translating.
+  reset(); r[0x808/4]=0x80010060; r[0xc08/4]=2; assert(plan().error);
+  reset(); r[0x808/4]=0x80000060; r[0xc08/4]=2; r[0x80c/4]=0x80000060; r[0xc0c/4]=3; assert(plan().error);
+  reset(); r[0x808/4]=0x80000060; r[0xc08/4]=2; for(unsigned k=0;k<8;++k) r[(128+69-k)*4096/4]=1;
+  p=plan(); assert(p.error && !__builtin_strcmp(p.error,"conflicting UFS stream mapping"));
+  // Redirect with the top bank held by another stream: the next bank down.
+  reset(); r[0x800/4]=0x80000061; r[0xc00/4]=69; r[0x808/4]=0x80000060; r[0xc08/4]=2; p=plan();
+  assert(!p.error && p.redirect && p.slot==2 && p.bank==68);
   // Our stream already mapped to the fallback bank by an earlier run (the top bank held by another stream): reused, not refused.
   reset(); r[0x800/4]=0x80000061; r[0xc00/4]=69; r[0x804/4]=0x80000060; r[0xc04/4]=68; r[(0x1000+4*68)/4]=0x10000;
   p=plan(); assert(!p.error && p.reuse && p.bank==68 && p.slot==1);
+  // Our own earlier fallback mapping on a lower bank, with the top bank free: still reused there, not redirected.
+  reset(); r[0x800/4]=0x80000060; r[0xc00/4]=68; r[(0x1000+4*68)/4]=0x10000;
+  p=plan(); assert(!p.error && p.reuse && !p.redirect && p.bank==68 && p.slot==0);
   reset(); r[0x800/4]=0x80010060; r[0xc00/4]=69; assert(plan().error);
   reset(); r[0x800/4]=0x80008060; r[0xc00/4]=1; assert(!plan().error); // Distinct 16-bit SID.
   reset(); r[(128+69)*4096/4]=1; p=plan(); assert(!p.error && p.bank==68); // translating top bank: use the next one
@@ -86,5 +125,6 @@ int main()
   reset(); p=plan(); drop=0xffffffffU; assert(!configure());
   r[(0x1800+4*p.bank)/4]=0x10001; p=plan(); assert(p.error);
   writes.clear(); assert(configure() && writes.empty());
-  puts("PASS: SMMU geometry/conflicts, VA64 high-DMA regression, full-range width limits, ordered configuration, reuse/repair and blocked-write refusal");
+  puts("PASS: SMMU geometry/conflicts, VA64 high-DMA regression, full-range width limits, ordered configuration, reuse/repair, "
+       "blocked-write refusal and the aston firmware-entry redirect");
 }
