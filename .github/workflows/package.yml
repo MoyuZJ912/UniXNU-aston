@@ -93,6 +93,10 @@ jobs:
         # Ath12kWifi's tools/fetch-sources.py clones with --sparse and adds root-anchored patterns ("/drivers/..."); the runner's
         # git starts sparse checkouts in cone mode, which rejects them. Pattern mode takes them as written.
         run: git config --global core.sparseCheckoutCone false
+      - name: upstream Mesa patch
+        # UniXNU's turnip-frame-diagnostics.patch creates a file without "new file mode", which git apply cannot apply to the fresh
+        # Mesa checkout a runner always has; add that one line (the script names the exact upstream and fixed files).
+        run: python3 UniXNU-aston/scripts/fix-upstream-mesa-patch.py UniXNU
       - name: platform seed
         env:
           seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
