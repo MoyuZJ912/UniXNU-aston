@@ -73,6 +73,7 @@ extern uint64_t aston_data_capacity_bytes __attribute__((weak_import));
 extern uint64_t aston_data_free_bytes __attribute__((weak_import));
 extern uint64_t aston_data_available_bytes __attribute__((weak_import));
 extern volatile int aston_migration_rerun_status __attribute__((weak_import));
+extern volatile int32_t aston_boot_screen_stats[3] __attribute__((weak_import));
 extern volatile int native_gpu_addon_files __attribute__((weak_import));
 extern volatile int native_gpu_addon_written __attribute__((weak_import));
 extern volatile int native_gpu_addon_same __attribute__((weak_import));
@@ -475,6 +476,13 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
     snprintf(row, sizeof row, "[data mount capacity] status=%d total=%llu free=%llu available=%llu migration=%d", aston_data_capacity_status,
              (unsigned long long)aston_data_capacity_bytes, (unsigned long long)aston_data_free_bytes,
              (unsigned long long)aston_data_available_bytes, &aston_migration_rerun_status ? aston_migration_rerun_status : -2);
+    at = put(out, at, cap, row, sizeof row);
+  }
+  // The boot screen (AstonBootScreen.cpp): state (1 drawing, 2/3 iOS drew, 4 time limit, <0 not started), log screens drawn, last second.
+  if (&aston_boot_screen_stats) {
+    char row[80];
+    snprintf(row, sizeof row, "[boot screen] state=%d screens=%d seconds=%d", aston_boot_screen_stats[0], aston_boot_screen_stats[1],
+             aston_boot_screen_stats[2]);
     at = put(out, at, cap, row, sizeof row);
   }
   // The payload's GPU addon (kern_exec.c native_gpu_addon_install): files in it (-1 none), written, already equal, failed, last error; then

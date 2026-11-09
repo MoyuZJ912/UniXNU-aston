@@ -500,7 +500,10 @@ BLUETOOTH = Path(os.environ.get('QCA_BLUETOOTH_DIR') or
                  (ROOT / 'drivers/QcaBluetooth' if (ROOT / 'drivers/QcaBluetooth').is_dir() else DEVICE / 'drivers/QcaBluetooth'))
 require((BLUETOOTH / 'include/qbt.h').exists(), 'QcaBluetooth module directory')
 board_objects = []
-for stem, extra in [('CpuFreqProbe', ()), ('WifiProbe', ('-I', str(WIFI / 'include'))),
+# The boot screen draws text with Mu-Silicium's Font.h (the panic screen's font), from the firmware tree UNIXNU_UEFI names.
+FONT = Path(os.environ.get('UNIXNU_UEFI') or ROOT / 'uefi-sheng') / 'Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib'
+require((FONT / 'Font.h').exists(), 'Mu-Silicium FrameBufferSerialPortLib/Font.h (UNIXNU_UEFI)')
+for stem, extra in [('AstonBootScreen', ('-I', str(FONT))), ('CpuFreqProbe', ()), ('WifiProbe', ('-I', str(WIFI / 'include'))),
                     ('BluetoothProbe', ('-I', str(BLUETOOTH / 'include'), '-I', str(ROOT / 'kits/Sm8550Platform'))),
                     ('AdspProbe', ()), ('AudioProbe', ()),
                     ('BacklightProbe', ()), ('DisplayTimingProbe', ()), ('BatteryProbe', ()),
