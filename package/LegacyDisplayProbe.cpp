@@ -509,7 +509,9 @@ extern void sheng_audio_probe(void);
 extern void sheng_buttons_probe(void);
 extern void sheng_backlight_probe(void);
 extern "C" void sheng_dpu_probe(void);
+extern "C" void aston_boot_screen_probe(void);
 void native_legacy_display_late_probe(void) {
+    aston_boot_screen_probe();  // first: the boot screen takes the framebuffer until iOS draws (AstonBootScreen.cpp)
     native_keystore_probe();
     sheng_cpufreq_probe();
     sheng_gpu_power_probe();
