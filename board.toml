@@ -126,8 +126,10 @@ kernel_args = [
 tool = "scripts/build-boot-runtime.py"
 target = "ios27"
 build = "24A446"
-# The Data volume inside unixnu after the OS root windows and the log; set from `unixnu build userdata --dry-run`.
-data_gib = 8
+# The Data volume inside unixnu after the OS root windows and the log. iOS: the root image is about 16.56 GB (OS 10223616000 and
+# SystemOS 6023020544 bytes, the two .vroot tables and the payload), the store window of 14 GiB plus its bitmap starts at block
+# 4456335 of unixnu (8388608 blocks, 1 GiB log reserve at the end), about 1.7 GB above the root image.
+data_gib = 14
 skip_setup = true
 trust_components = ["StaticTrustCache", "Cryptex1,SystemTrustCache", "Cryptex1,AppTrustCache"]
 # The iPadOS 27 wallpaper overlays name iPad paths; iOS has none yet.

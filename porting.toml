@@ -3,7 +3,7 @@ schema_version = 1
 [device]
 name = "aston"
 soc = "SM8550"
-os_profile = "ipados-27.0.1-24A446"
+os_profile = "ios-27.0.1-24A446"
 summary = "OnePlus Ace 3 PJE110 (aston), SM8550, iPadOS 27.0.1 (24A446). CPU and persistent Data fixes are source changes awaiting device verification. Inherited sheng observations are reference-board evidence only."
 
 [[area]]
@@ -12,7 +12,7 @@ status = "implemented"
 components = []
 paths = ["board.toml", "feeds.toml", "configs/**", ".gitmodules", ".github/**", ".gitignore"]
 inputs = ["UniXNU 5dc00d201496a1e7a72d1f5db23f041eb94ace1c, SM8550 97665e28578483082b674e8375a8fa65f4cf49cf, XNU ac9718fb1af618d5ce8678d0dc6e8a58f252216f."]
-configuration = ["board.name=aston, kit=sheng, os_profile=ipados-27.0.1-24A446, kernel.defconfig=aston_ipados27_defconfig.", "The first archive stages the pinned RamBlock publication patch before either source-storage or RamBlock compilation."]
+configuration = ["board.name=aston, kit=sheng, os_profile=ios-27.0.1-24A446, kernel.defconfig=aston_ios27_defconfig (branch ios27).", "The first archive stages the pinned RamBlock publication patch before either source-storage or RamBlock compilation."]
 procedure = ["Run the package workflow with the original installation seed, then inspect effective source pins and patch order."]
 findings = ["ArmCpu 93a5030 defaults armcpu-edge to zero, skipping ml_cpu_init_completed. Aston now selects armcpu-edge=1 after fixing the board Edge matrix.", "The RamBlock fix is applied to an isolated build-tree copy; revision and normalized source SHA-256 are checked and source.json records the patched input. Shared checkouts and source pins are unchanged."]
 completion = ["All source pins resolve; every selected component has a record; status shows the intended overrides and patch order."]
