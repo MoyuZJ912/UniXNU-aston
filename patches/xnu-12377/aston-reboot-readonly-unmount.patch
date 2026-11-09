@@ -1,0 +1,16 @@
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -4290,6 +4290,13 @@
+ 	    && ((mp->mnt_flag & MNT_ROOTFS) || (mp->mnt_kern_flag & MNTK_SYSTEM))) { //MNTK_BACKS_ROOT
+ 		printf("unmount(%d) %s skipped\n", uip->u_only_non_system, mntname);
+ 		mount_iterdrop(mp);     // VFS_ITERATE_CB_DROPREF
++	} else if (!uip->u_only_non_system && (mp->mnt_flag & MNT_RDONLY)) {
++		/*
++		 * aston: the last pass leaves read-only volumes mounted. They have nothing to write back, and reclaiming the sealed
++		 * OS volume under the SystemOS union releases a parent vnode that is already dead (vnode_rele_ext: usecount -ve).
++		 */
++		printf("unmount(%d) %s skipped (read-only)\n", uip->u_only_non_system, mntname);
++		mount_iterdrop(mp);     // VFS_ITERATE_CB_DROPREF
+ 	} else {
+ 		printf("unmount(%d) %s\n", uip->u_only_non_system, mntname);
+ 

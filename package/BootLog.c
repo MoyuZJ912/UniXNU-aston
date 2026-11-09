@@ -72,6 +72,7 @@ extern volatile int aston_data_capacity_status __attribute__((weak_import));
 extern uint64_t aston_data_capacity_bytes __attribute__((weak_import));
 extern uint64_t aston_data_free_bytes __attribute__((weak_import));
 extern uint64_t aston_data_available_bytes __attribute__((weak_import));
+extern volatile int aston_migration_rerun_status __attribute__((weak_import));
 extern volatile int native_gpu_addon_files __attribute__((weak_import));
 extern volatile int native_gpu_addon_written __attribute__((weak_import));
 extern volatile int native_gpu_addon_same __attribute__((weak_import));
@@ -469,10 +470,11 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
     at = put(out, at, cap, row, sizeof row);
   }
   if (&aston_data_capacity_status && &aston_data_capacity_bytes && &aston_data_free_bytes && &aston_data_available_bytes) {
-    char row[160];
-    snprintf(row, sizeof row, "[data mount capacity] status=%d total=%llu free=%llu available=%llu", aston_data_capacity_status,
+    char row[176];
+    // migration: aston-migration-rerun.patch (0 marker removed, 2 none there, -1 not asked, -2 not in this kernel)
+    snprintf(row, sizeof row, "[data mount capacity] status=%d total=%llu free=%llu available=%llu migration=%d", aston_data_capacity_status,
              (unsigned long long)aston_data_capacity_bytes, (unsigned long long)aston_data_free_bytes,
-             (unsigned long long)aston_data_available_bytes);
+             (unsigned long long)aston_data_available_bytes, &aston_migration_rerun_status ? aston_migration_rerun_status : -2);
     at = put(out, at, cap, row, sizeof row);
   }
   // The payload's GPU addon (kern_exec.c native_gpu_addon_install): files in it (-1 none), written, already equal, failed, last error; then

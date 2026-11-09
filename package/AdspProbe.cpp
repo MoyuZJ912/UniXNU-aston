@@ -3,7 +3,7 @@
 // the DSP's SMP2P state, the AOSS mailbox, the RSC, the command database) and writes nothing; sheng-adsp=2 starts the DSP and brings up
 // GLINK so the battery manager (PMIC GLINK) and the audio services (GPR) can talk to it.
 //
-// Devicetree facts: remoteproc@6800000 (qcom,sm8550-adsp-pas), PAS id 1 for adsp.mbn in adspslpi 0x9ea00000 + 0x4680000 and id 36 for
+// Devicetree facts: remoteproc@6800000 (qcom,sm8550-adsp-pas), PAS id 1 for adsp.mbn in adspslpi 0x9ea00000 + 0x4680000 (aston: 0x4880000) and id 36 for
 // adsp_dtb.mbn in q6-adsp-dtb 0x9e980000 + 0x80000; proxy power domains lcx and lmx (RPMh ARC lcx.lvl, lmx.lvl) and the AOSS load_state
 // "adsp"; SMEM 0x81d00000 + 0x200000 with TCSR mutex 3 (0x1f40000, stride 0x1000); SMP2P items 443 (in) and 429 (out), remote pid 2,
 // entries "master-kernel" (bit 0 stop) and "slave-kernel" (fatal 0, ready 1, handover 2, stop ack 3); IPCC 0x408000 (SPI 229): LPASS
@@ -51,7 +51,8 @@ enum Stage {
 };
 constexpr uint64_t kSmem = 0x81d00000, kSmemSize = 0x200000, kMutex = 0x1f40000 + 3 * 0x1000, kIpcc = 0x408000, kAoss = 0xc300000;
 constexpr uint64_t kRscDrv = 0x17a20000, kRscTcs = 0xd00, kCmdDb = 0x81c60000, kCmdDbSize = 0x20000;
-constexpr uint64_t kAdspBase = 0x9ea00000, kAdspSize = 0x4680000, kDtbBase = 0x9e980000, kDtbSize = 0x80000;
+// Ace 3 (aston): adspslpi is 0x9ea00000 + 0x4880000 in its devicetree, and its adsp.mdt (modem_a and modem_b) loads exactly that span.
+constexpr uint64_t kAdspBase = 0x9ea00000, kAdspSize = 0x4880000, kDtbBase = 0x9e980000, kDtbSize = 0x80000;
 constexpr uint32_t kPasAdsp = 1, kPasDtb = 36, kRemotePid = 2, kItemIn = 443, kItemOut = 429, kItemCrash = 423;
 constexpr uint32_t kItemGlinkDesc = 478, kItemGlinkTx = 479, kItemGlinkRx = 480, kGlinkFifo = 0x4000;
 constexpr uint32_t kSpiIpcc = 229, kSpiRsc = 5;

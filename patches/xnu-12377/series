@@ -19,3 +19,5 @@ sheng-appsync-user-trust.patch
 aston-edge-policy.patch
 aston-cpu-idle-samples.patch
 aston-data-diagnostics.patch
+aston-reboot-readonly-unmount.patch
+aston-migration-rerun.patch

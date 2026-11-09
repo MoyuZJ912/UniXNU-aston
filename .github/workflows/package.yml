@@ -185,12 +185,15 @@ jobs:
           ./unixnu build kernel payload -D ../UniXNU-aston "${args[@]}"
       - name: Ace 3 menu
         # The payload volume replaces the firmware's menu on this phone: keep "Switch to slot B" as the default.
-        # Variants of the same kernel and Data for comparison on the device: scale 2, and the first test's CPU display path (no GPU,
-        # no fuel gauge) as a fallback.
+        # Variants of the same kernel and Data for comparison on the device: the log-sys/log-power BootLog rows; a one-time rebuild of
+        # the app and group containers (the seed skipped the first-boot data migration; aston-migration-rerun.patch); scale 2; and the
+        # first test's CPU display path (no GPU, no fuel gauge, no DSP) as a fallback.
         run: |
           python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img" \
+            --variant "xnu-diag|iPadOS diag (logs)|log-sys=1 log-power=1" \
+            --variant "xnu-migrate|Rebuild app data (slow, once)|sheng-rerun-migration=1 sheng-staged-apps=1 log-sys=1 log-power=1" \
             --variant "xnu-2x|iPadOS 2x|offline-legacy-unit-scale=2" \
-            --variant "xnu-safe|iPadOS safe (CPU display)|!sheng-gpu-power !sheng-gpu-metal !sheng-fb-gpu !sheng-fb-bgra !sheng-gpu-dcvs !sheng-gpu-addon !sheng-battery"
+            --variant "xnu-safe|iPadOS safe (CPU display)|!sheng-gpu-power !sheng-gpu-metal !sheng-fb-gpu !sheng-fb-bgra !sheng-gpu-dcvs !sheng-gpu-addon !sheng-battery !sheng-adsp"
       - uses: actions/cache/save@v4
         if: always() && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/aston/ipados-27.0.1-24A446/aston_ipados27/runtime/data.dbr') != ''
         with:

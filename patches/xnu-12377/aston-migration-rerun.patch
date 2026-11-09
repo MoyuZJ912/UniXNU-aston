@@ -1,0 +1,43 @@
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -9122,6 +9122,32 @@ aston_data_capacity_checkpoint(mount_t mp)
+ 	    (unsigned long long)aston_data_available_bytes);
+ }
+ 
++/*
++ * aston: the installation seed carries com.apple.migration.plist (Setup skipped), so datamigrator never ran the first-boot data
++ * migration and no app or group container exists (Files and DockFolderViewService crash on a nil local-storage URL, dasd aborts on a
++ * nil path). With boot-arg sheng-rerun-migration=1 the marker is removed before launchd starts, and that boot's migration installs the
++ * system apps and makes their containers (slow: many minutes at full load, once). Status for the boot log: 0 removed, ENOENT none
++ * there, -1 not asked.
++ */
++volatile int aston_migration_rerun_status = -1;
++static void
++aston_migration_rerun(proc_t p, user_addr_t scratch)
++{
++	static const char marker[] = "/private/var/mobile/Library/Preferences/com.apple.migration.plist";
++	uint32_t asked = 0;
++	if (!PE_parse_boot_argn("sheng-rerun-migration", &asked, sizeof(asked)) || asked != 1) {
++		return;
++	}
++	struct unlink_args request = {.path = scratch + 0xc00};
++	int32_t result = 0;
++	int error = copyout(marker, request.path, sizeof(marker));
++	if (!error) {
++		error = unlink(p, &request, &result);
++	}
++	aston_migration_rerun_status = error;
++	printf("aston-data: migration marker removal %d\n", error);
++}
++
+ static int
+ native_owner_data_prepare(proc_t p, user_addr_t scratch)
+ {
+@@ -9184,6 +9210,7 @@ native_owner_data_prepare(proc_t p, user_addr_t scratch)
+ 	if (!error) {
+ 		native_owner_data_stage = 4;
+ 		aston_data_capacity_checkpoint(data_mount);
++		aston_migration_rerun(p, scratch);
+ 	}
+ 	if (!error) native_gpu_addon_prepare(p, scratch);
+ 	if (!error) native_staged_apps_prepare(p, scratch, data_mount);
