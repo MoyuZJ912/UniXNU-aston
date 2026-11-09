@@ -1,0 +1,52 @@
+--- a/osfmk/kern/sched_clutch.c
++++ b/osfmk/kern/sched_clutch.c
+@@ -1400,16 +1400,6 @@
+ 	return sched_boot_pset->pset_id;
+ }
+ 
+-/*
+- * sheng: fixed priority, UI and user-initiated threads that prefer the P cluster neither migrate nor get stolen to the E cluster.
+- * The A510 cores run at a fraction of the P cores' speed and no performance controller raises their clock for a frame, so
+- * such a thread waits for (or preempts lower work on) a P core instead.
+- */
+-static bool
+-sched_edge_ui_bucket_stays_on_p(pset_type_t from, pset_type_t to, sched_bucket_t bucket)
+-{
+-	return from == PSET_AMP_P && to == PSET_AMP_E && bucket < TH_BUCKET_SHARE_DF;
+-}
+ #endif /* CONFIG_SCHED_EDGE */
+ 
+ /*
+@@ -6401,8 +6391,8 @@
+ 	edge_config_defaults[PSET_AMP_E][PSET_AMP_E] = free_spill;
+ 	/* P -> E */
+ 	edge_config_defaults[PSET_AMP_P][PSET_AMP_E] = weighted_spill;
+-	/* E -> P; sheng: an idle P core may steal E work, as no controller moves thread groups */
+-	edge_config_defaults[PSET_AMP_E][PSET_AMP_P] = (sched_clutch_edge){.sce_migration_weight = 0, .sce_migration_allowed = 0, .sce_steal_allowed = 1};
++	/* E -> P: keep utility/background work on the efficiency cluster. */
++	edge_config_defaults[PSET_AMP_E][PSET_AMP_P] = no_spill;
+ #if HAS_MCORE
+ 	/* M -> M */
+ 	edge_config_defaults[PSET_AMP_M][PSET_AMP_M] = free_spill;
+@@ -6486,9 +6476,6 @@
+ 				 * values when deciding to enforce performance islands for certain buckets.
+ 				 */
+ #endif /* CONFIG_SCHED_PERF_ISLANDS */
+-				if (sched_edge_ui_bucket_stays_on_p(src_pset->pset_type, dst_pset->pset_type, bucket)) {
+-					edge_config = no_spill;
+-				}
+ 				sched_edge_config_set(src_pset_id, dst_pset_id, bucket, edge_config);
+ 				if (edge_config.sce_migration_allowed) {
+ 					src_pset->max_parallel_cores[bucket] += dst_pset->cpu_set_count;
+@@ -6504,10 +6491,7 @@
+ 	}
+ 	sched_edge_config_final_push();
+ #if DEVELOPMENT || DEBUG
+-	/* The matrix check is advisory: the board's two-cluster matrix (UI buckets stay on P) is reported, not fatal. */
+-	if (!sched_edge_config_verify()) {
+-		kprintf("warn: sched_edge_config_verify failed; continuing\n");
+-	}
++	assert(sched_edge_config_verify());
+ #endif /* DEVELOPMENT || DEBUG */
+ 	splx(s);
+ }

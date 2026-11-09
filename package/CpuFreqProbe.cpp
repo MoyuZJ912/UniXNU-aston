@@ -38,6 +38,7 @@
 #include <pexpert/pexpert.h>
 #include <kern/thread.h>
 #include <mach/mach_time.h>
+#include "CpuFreqPolicy.h"
 
 extern "C" {
 char native_cpufreq_row[120];
@@ -242,9 +243,9 @@ void governorThread(void *, wait_result_t) {
         const bool boost = t < boostEnd;
         uint64_t busy[3] = {};   // per mille of the busiest CPU
         for (unsigned c = 0; c < kCpus; ++c) {
-            const uint64_t idle = sheng_cpu_idle_mach((int)c), di = idle - lastIdle[c];
+            const uint64_t idle = sheng_cpu_idle_mach((int)c);
+            const uint64_t b = cpufreq_busy_per_mille(idle, lastIdle[c], dt);
             lastIdle[c] = idle;
-            const uint64_t b = di >= dt ? 0 : (dt - di) * 1000 / dt;
             const int d = kCpuDomain[c];
             if (b > busy[d]) busy[d] = b;
         }

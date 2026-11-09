@@ -31,6 +31,7 @@ patch_series = ["arch:patches/xnu/series", "soc:patches/xnu-12377/series", "os:p
 # CPU frequency, GPU power) and links them against the original families of this fileset. fetch-sheng-dts.py and the prepare-sheng-*
 # generators still read the reference board's devicetree for the GPU inputs (the same kalama GPU and GMU nodes).
 archives = [
+  "prepare-aston-ramblock.py",
   "build-corecrypto-14.py",
   "build-corecrypto-14.py --namespace",
   "component:ArmDTPlatform",
@@ -104,7 +105,9 @@ kernel_args = [
   "offline-legacy-cpu-present=1", "offline-legacy-phase=4", "offline-key-events=1",
   "sheng-aks=1", "offline-hid-input=1", "offline-hid-home=1",
   "sheng-touch=4", "sheng-touch-hid=1", "sheng-buttons=1", "sheng-log=1",
-  "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "sheng-data-persist=2", "sheng-cpufreq=4",
+  "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "armcpu-edge=1", "sheng-data-persist=2", "sheng-cpufreq=4",
+  # Brief touch boost; continuous display activity must not impose a CPU frequency floor.
+  "sheng-cpufreq-boost-ms=80", "sheng-cpufreq-frame-ms=0",
   "sheng-gpu-power=9", "sheng-gpu-metal=1", "sheng-fb-gpu=1", "sheng-fb-bgra=1", "sheng-gpu-dcvs=1", "sheng-gpu-addon=1",
   "sheng-battery=2",
   "sheng-no-lc=1", "sheng-vsync=60", "sheng-vsync-fixed=1", "sheng-disable-watchdogd=1", "sheng-lite=1",

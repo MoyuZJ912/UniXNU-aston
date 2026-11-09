@@ -68,6 +68,10 @@ extern volatile uint64_t native_data_persist_writes __attribute__((weak_import))
 extern volatile uint64_t native_data_persist_syncs __attribute__((weak_import));
 extern volatile uint64_t native_data_persist_errors __attribute__((weak_import));
 extern volatile uint64_t native_data_persist_first_lba __attribute__((weak_import));
+extern volatile int aston_data_capacity_status __attribute__((weak_import));
+extern uint64_t aston_data_capacity_bytes __attribute__((weak_import));
+extern uint64_t aston_data_free_bytes __attribute__((weak_import));
+extern uint64_t aston_data_available_bytes __attribute__((weak_import));
 extern volatile int native_gpu_addon_files __attribute__((weak_import));
 extern volatile int native_gpu_addon_written __attribute__((weak_import));
 extern volatile int native_gpu_addon_same __attribute__((weak_import));
@@ -462,6 +466,13 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
              (unsigned long long)native_data_persist_present, (unsigned long long)native_data_persist_loaded, (unsigned long long)native_data_persist_writes,
              (unsigned long long)native_data_persist_syncs, (unsigned long long)native_data_persist_errors, (unsigned long long)native_data_persist_pages);
     at = put(out, at, cap, "[data]", 8);
+    at = put(out, at, cap, row, sizeof row);
+  }
+  if (&aston_data_capacity_status && &aston_data_capacity_bytes && &aston_data_free_bytes && &aston_data_available_bytes) {
+    char row[160];
+    snprintf(row, sizeof row, "[data mount capacity] status=%d total=%llu free=%llu available=%llu", aston_data_capacity_status,
+             (unsigned long long)aston_data_capacity_bytes, (unsigned long long)aston_data_free_bytes,
+             (unsigned long long)aston_data_available_bytes);
     at = put(out, at, cap, row, sizeof row);
   }
   // The payload's GPU addon (kern_exec.c native_gpu_addon_install): files in it (-1 none), written, already equal, failed, last error; then

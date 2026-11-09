@@ -1,0 +1,21 @@
+--- a/osfmk/kern/processor.c
++++ b/osfmk/kern/processor.c
+@@ -2035,15 +2035,15 @@
+ 
+ /*
+  * Board CPU governor helper: a CPU's idle time so far in mach absolute time units (recount brings it up to now
+- * while the CPU idles), for board code that cannot see struct processor. 0 for a CPU number without a processor.
++ * while the CPU idles), for board code that cannot see struct processor. UINT64_MAX for an offline or absent CPU.
+  */
+ uint64_t sheng_cpu_idle_mach(int cpu);
+ uint64_t
+ sheng_cpu_idle_mach(int cpu)
+ {
+ 	processor_t p = cpu_to_processor(cpu);
+-	if (p == PROCESSOR_NULL) {
+-		return 0;
++	if (p == PROCESSOR_NULL || p->state == PROCESSOR_OFF_LINE) {
++		return UINT64_MAX;
+ 	}
+ 	struct recount_usage usage = {};
+ 	uint64_t idle = 0;
