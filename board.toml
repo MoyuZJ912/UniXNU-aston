@@ -116,6 +116,9 @@ kernel_args = [
   # The battery values come from the pack's fuel gauge (sheng-battery=2); charging itself is the battery manager in the audio DSP, so
   # the DSP is started (sheng-adsp=2, firmware read in place from modem_a, adspslpi 0x9ea00000 + 0x4880000 on this board).
   "sheng-battery=2", "sheng-adsp=2",
+  # The seed keeps the first-boot data migration (unixnu-patches/0002); the deletable system apps it installs are copied once from
+  # the OS volume's staged_system_apps into Data before launchd (zzy-staged-system-apps.patch, marker /private/var/db/.sheng-staged-apps).
+  "sheng-staged-apps=1",
   "sheng-no-lc=1", "sheng-vsync=60", "sheng-vsync-fixed=1", "sheng-disable-watchdogd=1", "sheng-lite=1",
 ]
 
