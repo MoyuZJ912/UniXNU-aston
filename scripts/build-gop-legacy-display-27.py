@@ -20,8 +20,26 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'build/native-legacy-display'
 OUT.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT / 'kits/XnuPrelink'))
-ABI_PATH = Path(__file__).resolve().with_name('legacy-display-24A446.json')
-abi = json.loads(ABI_PATH.read_text())
+# The fileset the class fixtures belong to, chosen by the root OS volume of the selected profile (UNIXNU_ROOT_OS_UUID): iPad17,3
+# (ipados-27.0.1-24A446, the reviewed records) or iPhone17,2 (ios-27.0.1-24A446: the same records ported with
+# markakash/UniXNU-ishtar scripts/kc-port.py, every address verified, 0 failures). Each fixture must name that kernelcache.
+FILESETS = {'2F8E6EED-68D5-4261-B8A3-12571BAA2DD4': ('', '38e6d9fa5f789b8228f4617ef4c6d2a3fd8ab564abdc9b62920f1db53fc1780a'),
+            'E3F4AED0-4454-4D5B-833C-E27E99C4F67B': ('-d94ap', 'fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95')}
+ROOT_OS = os.environ.get('UNIXNU_ROOT_OS_UUID', '').upper()
+if ROOT_OS not in FILESETS:
+    raise SystemExit(f'No class fixtures for the root OS volume {ROOT_OS or "(UNIXNU_ROOT_OS_UUID unset)"}')
+FIXTURE_SUFFIX, FIXTURE_KERNELCACHE = FILESETS[ROOT_OS]
+
+
+def fixture(name):
+    path = Path(__file__).resolve().with_name(f'{name}-24A446{FIXTURE_SUFFIX}.json')
+    record = json.loads(path.read_text())
+    if record['kernelcache_sha256'] != FIXTURE_KERNELCACHE:
+        raise SystemExit(f'{path.name} names kernelcache {record["kernelcache_sha256"]}, not {FIXTURE_KERNELCACHE}')
+    return path, record
+
+
+ABI_PATH, abi = fixture('legacy-display')
 slide = int(abi['collection_slide'], 16)
 # Original targets are fixed collection addresses. XnuPrelink recomputes the
 # BTI/B adapter displacement after placing native text; no prior build is needed.
@@ -385,7 +403,7 @@ DEVICE = Path(os.environ.get('UNIXNU_DEVICE') or ROOT.parents[5] / 'UniXNU-aston
 # The HID source is the tree's refer link (a clean pinned clone of the feed), not a hand-placed copy.
 print(run(['python3', ROOT / 'scripts/build-aston-source-drivers.py', '--tree', ROOT, '--device', DEVICE], text=True), end='')
 SRC = ROOT / 'build/sheng-source-drivers'
-hid_abi = json.loads(Path(__file__).resolve().with_name('hid-device-24A446.json').read_text())
+HID_PATH, hid_abi = fixture('hid-device')
 hid_slots = [(int(t, 16), int(d, 16)) for t, d in hid_abi['slots']]
 hid_pure = {i for i, (t, _) in enumerate(hid_slots) if t == slots[214][0]}
 
@@ -510,7 +528,7 @@ board_objects += [Path(line.split(' ', 1)[1]) for line in run(['python3', ROOT /
     board_dir / 'qca-bluetooth', '--tree', ROOT], text=True).splitlines() if line.startswith('OBJ ')]
 input_objects += board_objects
 # USB device mode: the native SM8550 subclass of the original AppleUSBXDCI of this fileset.
-usb_abi = json.loads(Path(__file__).resolve().with_name('usb-xdci-24A446.json').read_text())
+USB_XDCI_PATH, usb_abi = fixture('usb-xdci')
 usb_slots = [(int(t, 16), int(d, 16)) for t, d in usb_abi['slots']]
 usb_methods = {int(k): v for k, v in usb_abi['methods'].items()}
 usb_pure = {i for i, (t, _) in enumerate(usb_slots) if t == slots[214][0]}
@@ -552,7 +570,7 @@ usb_header += f'}};\nstatic_assert(sizeof(AppleUSBXDCI)=={usb_abi["instance_size
 (USB_OUT / 'OriginalUsbXdciABI.h').write_text(usb_header)
 # Host mode: the native subclass of the original AppleUSBXHCI, in the same object. IOService slots the original overrides are declared so
 # that the native vtable reaches them.
-xhci_abi = json.loads(Path(__file__).resolve().with_name('usb-xhci-24A446.json').read_text())
+USB_XHCI_PATH, xhci_abi = fixture('usb-xhci')
 xhci_slots = [(int(t, 16), int(d, 16)) for t, d in xhci_abi['slots']]
 xhci_methods = {int(k): v for k, v in xhci_abi['methods'].items()}
 xhci_names = {188: 'XHCI_DESIRED_POWER', 315: 'XHCI_READ64', 317: 'XHCI_WRITE64'}
@@ -665,8 +683,8 @@ run(['xcrun', 'ar', 'rcs', archive, late, OUT / 'original-bindings.o', OUT / 'or
 sources = [ROOT / 'drivers/GopFramebuffer/NativeLegacyDisplay.cpp', ROOT / 'drivers/GopFramebuffer/NativeLegacyRequest.h',
            ROOT / 'drivers/GopFramebuffer/NativeGOPPresenter.cpp', ROOT / 'drivers/GopFramebuffer/NativeGOPWire.h',
            ROOT / 'drivers/GopFramebuffer/NativeHalfCodes.h', source,
-           ROOT / 'scripts' / ABI_PATH.name, keystore_source, ROOT / 'drivers/AppleKeyStoreState/NativeKeyStoreEvents.cpp',
-           ROOT / 'scripts/hid-device-24A446.json', hid_probe]
+           ABI_PATH, keystore_source, ROOT / 'drivers/AppleKeyStoreState/NativeKeyStoreEvents.cpp',
+           HID_PATH, hid_probe]
 sources += [KITS / name for name in ('BluetoothProbe.cpp', 'BluetoothFirmware.h', 'WcnPower.h')]
 sources += [ROOT / 'scripts/build-qca-bluetooth.py', BLUETOOTH / 'tools/source-lock.json']
 sources += [Path(name) for name in json.loads((board_dir / 'qca-bluetooth/report.json').read_text())['source']]
@@ -674,7 +692,7 @@ for directory in ('include', 'src', 'shim', 'out/linux'):
     sources += sorted((BLUETOOTH / directory).rglob('*.h'))
 sources += [ROOT / 'kits/Sm8550Platform' / name for name in ('Sm8550GeniUart.h', 'Sm8550QupDma.h')]
 sources += [KITS / name for name in ('SmmuBypass.h', 'AppsSmmuLock.h', 'UsbProbe.cpp')]
-sources += [USB / 'QcomDwc3.cpp', USB / 'QcomEusb2Phy.h', USB / 'QcomQmpUsb3.h', USB / 'QcomUcsi.h', ROOT / 'scripts/usb-xdci-24A446.json', ROOT / 'scripts/usb-xhci-24A446.json']
+sources += [USB / 'QcomDwc3.cpp', USB / 'QcomEusb2Phy.h', USB / 'QcomQmpUsb3.h', USB / 'QcomUcsi.h', USB_XDCI_PATH, USB_XHCI_PATH]
 
 
 def source_name(path):

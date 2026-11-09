@@ -4,6 +4,8 @@ schema_version = 2
 # Derived from UniXNU-sheng 689400177f93219a38bd7cf5ae2e9f5782adc594 (Xiaomi Pad 6S Pro, the reference SM8550 board) and its
 # iPadOS 27.0.1 (24A446) chain. The iPadOS 17 chain of that board needs prelinked candidate kernels qualified on sheng hardware
 # (scripts/audit-mobile-graphics-legacy.py), which no other board can produce, so this board follows the 27 chain.
+# Branch ios27: the same board on iOS 27.0.1 (24A446) as iPhone17,2 (D94AP), the profile of unixnu-patches/ (after
+# markakash/UniXNU-ishtar, the SM8550 iOS 27 port). Stage A: CPU display, touch, keys, storage, battery and DSP; no GPU yet.
 # The package keeps the reference kit name "sheng" (installed as kits/sheng) and the "sheng-*" boot argument names: the shared
 # scripts and drivers address the board kit by that name.
 [board]
@@ -12,7 +14,7 @@ soc = "SM8550"
 description = "OnePlus Ace 3 PJE110"
 kit = "sheng"
 soc_source = "sm8550"
-os_profile = "ipados-27.0.1-24A446"
+os_profile = "ios-27.0.1-24A446"
 
 # The iOS partition carved from the end of Android's userdata (dual_sys plan-32g, sda15, 32 GiB). ShengUfs is built to match the
 # GPT name "unixnu" only (drivers/ShengUfs/RootLayout.h); Android's userdata is never opened. The image file keeps the upstream
@@ -24,8 +26,8 @@ last_lba = 123812607
 lba_bytes = 4096
 
 [kernel]
-defconfig = "aston_ipados27_defconfig"
-config_fragments = ["arch:configs/common.config", "os:configs/ipados.config"]
+defconfig = "aston_ios27_defconfig"
+config_fragments = ["arch:configs/common.config", "os:configs/ios.config"]
 patch_series = ["arch:patches/xnu/series", "soc:patches/xnu-12377/series", "os:patches/xnu/series", "device:patches/xnu-12377/series"]
 # The reference 24A446 archive chain. build-gop-legacy-display-27.py builds the board objects (touch, keys, brightness, battery,
 # CPU frequency, GPU power) and links them against the original families of this fileset. fetch-sheng-dts.py and the prepare-sheng-*
@@ -38,7 +40,7 @@ archives = [
   "component:ArmCpu",
   "build-libpthread-kernel.py",
   "component:ShengUfs",
-  "build-sheng-source-storage.py --policy-dir scripts/policies/ipados-27.0.1-24A446",
+  "build-sheng-source-storage.py --policy-dir scripts/policies/ios-27.0.1-24A446",
   "component:RamBlock",
   "component:Adreno740",
   "fetch-sheng-dts.py",
@@ -55,6 +57,7 @@ archives = [
 
 [kernel.prelink]
 # The profile's roots plus the USB device and host stacks (the reference board's list; the SoC's USB controller is the same).
+# The iPhone17,2 fileset has no com.apple.iokit.IOHIDEventDriver bundle (the class ships in IOHIDFamily).
 roots = [
   "com.apple.AppleFSCompression.AppleFSCompressionTypeZlib", "com.apple.driver.AppleARMPlatform", "com.apple.driver.AppleARMWatchdogTimer",
   "com.apple.driver.AppleAudioClockLibs", "com.apple.driver.AppleEffaceableStorage", "com.apple.driver.AppleIISController",
@@ -64,7 +67,7 @@ roots = [
   "com.apple.iokit.IOGPUFamily", "com.apple.iokit.IOHDCPFamily", "com.apple.iokit.IOMobileGraphicsFamily",
   "com.apple.iokit.IOReportFamily", "com.apple.iokit.IOSlowAdaptiveClockingFamily", "com.apple.iokit.IOStorageFamily",
   "com.apple.iokit.IOSurface", "com.apple.kec.Libm", "com.apple.kec.corecrypto", "com.apple.kext.AppleMatch", "com.apple.kext.CoreTrust",
-  "com.apple.security.AppleImage4", "com.apple.security.sandbox", "com.apple.iokit.IOHIDFamily", "com.apple.iokit.IOHIDEventDriver",
+  "com.apple.security.AppleImage4", "com.apple.security.sandbox", "com.apple.iokit.IOHIDFamily",
   "com.apple.iokit.IOUSBDeviceFamily", "com.apple.driver.AppleUSBXDCI", "com.apple.driver.AppleUSBDeviceMux",
   "com.apple.iokit.IOUSBHostFamily", "com.apple.driver.usb.AppleUSBXHCI", "com.apple.driver.usb.AppleUSBHub",
   "com.apple.driver.usb.AppleUSBHostCompositeDevice", "com.apple.driver.usb.IOUSBHostHIDDevice", "com.apple.iokit.IOUSBMassStorageDriver",
@@ -83,7 +86,7 @@ volume = "ASTONESP"
 size_mib = 176
 root_policies = "{tree}/build/sheng-source-storage/root-policies.bin"
 loader = "firmware"
-title = "iPadOS"
+title = "iOS"
 dram_size = "0x80000000"
 skip_setup_tool = "scripts/seed-data-skip-setup.py"
 panic_screen = true
@@ -108,7 +111,8 @@ kernel_args = [
   "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "armcpu-edge=1", "sheng-data-persist=2", "sheng-cpufreq=4",
   # Brief touch boost; continuous display activity must not impose a CPU frequency floor.
   "sheng-cpufreq-boost-ms=80", "sheng-cpufreq-frame-ms=0",
-  "sheng-gpu-power=9", "sheng-gpu-metal=1", "sheng-fb-gpu=1", "sheng-fb-bgra=1", "sheng-gpu-dcvs=1", "sheng-gpu-addon=1",
+  # iOS stage A: no GPU arguments. The Adreno accelerator (CONFIG_XNU_NATIVE_ADRENO=n) and the Metal plugin are bound to the iPad
+  # kernelcache and shared cache; the display is the CPU path the first iPadOS boot used.
   # The battery values come from the pack's fuel gauge (sheng-battery=2); charging itself is the battery manager in the audio DSP, so
   # the DSP is started (sheng-adsp=2, firmware read in place from modem_a, adspslpi 0x9ea00000 + 0x4880000 on this board).
   "sheng-battery=2", "sheng-adsp=2",
@@ -123,7 +127,8 @@ build = "24A446"
 data_gib = 8
 skip_setup = true
 trust_components = ["StaticTrustCache", "Cryptex1,SystemTrustCache", "Cryptex1,AppTrustCache"]
-wallpapers = ["ipados27", "ipados27-floating"]
+# The iPadOS 27 wallpaper overlays name iPad paths; iOS has none yet.
+wallpapers = []
 
 [payload.runtime.launchd_job_environment."com.apple.iconservices.iconservicesagent"]
 FORCE_SOFTWARE_RENDERER = "0"
@@ -131,7 +136,7 @@ CI_ENABLE_METAL_GPU = "0"
 
 [payload.install]
 title = "Install and boot"
-confirm = "ERASE all iPadOS user data and install again?"
+confirm = "ERASE all iOS user data and install again?"
 confirm_titles = ["Erase Data, skip Hello, boot", "Erase Data, show Hello, boot"]
 confirm_args = ["sheng-data-reset=1", "sheng-data-reset=2"]
 
@@ -156,7 +161,7 @@ include_dirs = ["soc:dts"]
 include = ["ArmDTPlatform", "ArmCpu", "XnuPrelink", "DarwinBoot", "ShengPreflight", "ShengUfs", "RamBlock", "GopFramebuffer", "AppleKeyStoreState", "Adreno740", "AdrenoMetal"]
 
 [adt.product.string]
-model = "J120AP"
+# The iPad model override of the iPadOS chain (J120AP) is left out: the profile's iPhone17,2 identity stands.
 artwork-display-gamut = "sRGB"
 
 [adt.product.u32]
@@ -188,3 +193,4 @@ unixnu = "../UniXNU"
 
 [package.defconfig]
 "ipados-27.0.1-24A446" = "aston_ipados27_defconfig"
+"ios-27.0.1-24A446" = "aston_ios27_defconfig"
