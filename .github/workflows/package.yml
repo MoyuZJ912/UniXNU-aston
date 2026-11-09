@@ -113,7 +113,7 @@ jobs:
         run: python3 UniXNU-aston/scripts/fix-upstream-mesa-patch.py UniXNU
       - name: iOS 27 profile
         # UniXNU has no iOS profile: unixnu-patches/ adds ios-27.0.1-24A446 (iPhone17,2 D94AP, after markakash/UniXNU-ishtar
-        # 0001/0002/0005/0009 with the lockdown board-id) to the pinned checkout.
+        # 0001/0002/0005/0009 with the lockdown board-id) to the pinned checkout, and lets a new seed keep the first-boot migration.
         working-directory: UniXNU
         run: |
           for p in ../UniXNU-aston/unixnu-patches/*.patch; do echo "apply $p"; git apply "$p"; done
@@ -180,6 +180,9 @@ jobs:
           UNIXNU_UEFI: ${{ github.workspace }}/Mu-Silicium
           GITHUB_TOKEN: ${{ github.token }}
           INIT_DATA: ${{ inputs.init_data }}
+          # A new seed skips Setup but not the first-boot data migration (unixnu-patches/0002): the migration registers the
+          # system apps and makes their app and group containers, which the iPadOS seed never got. The first boot is slow.
+          UNIXNU_SEED_FIRST_BOOT_MIGRATION: "1"
         run: |
           trap 'df -h . || true' EXIT
           ./unixnu defconfig aston_ios27_defconfig -D ../UniXNU-aston

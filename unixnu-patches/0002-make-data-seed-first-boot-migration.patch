@@ -1,0 +1,19 @@
+diff --git a/scripts/make-data-seed.py b/scripts/make-data-seed.py
+index eeaf3cb..2c93903 100644
+--- a/scripts/make-data-seed.py
++++ b/scripts/make-data-seed.py
+@@ -83,8 +83,12 @@ def main():
+                       dict(LockdownActivationIndicatesCloudConfigurationAvailable=False))
+                 merge(mount, 'mobile', 'com.apple.springboard', dict(BKNoWatchdogs=True,
+                       FBLaunchWatchdogExceptions={'com.apple.purplebuddy': 100.0}, MCForceShowCloudConfigurationUI=False))
+-                merge(mount, 'mobile', 'com.apple.migration', dict(LastSystemVersion=args.build,
+-                      DMUserDataDisposition=dict(SyntheticDidUpgrade=False, buildVersion=args.build)))
++                # UNIXNU_SEED_FIRST_BOOT_MIGRATION=1 leaves com.apple.migration out: the first boot then runs the data migration,
++                # which registers the system apps and makes their data and group containers (without it Files and the Dock
++                # folder service crash on a nil local-storage URL). The migration writes the marker itself when it is done.
++                if os.environ.get('UNIXNU_SEED_FIRST_BOOT_MIGRATION') != '1':
++                    merge(mount, 'mobile', 'com.apple.migration', dict(LastSystemVersion=args.build,
++                          DMUserDataDisposition=dict(SyntheticDidUpgrade=False, buildVersion=args.build)))
+             for home in ('root', 'mobile'):
+                 for name in ('backboardd', '.GlobalPreferences'):
+                     merge(mount, home, name, dict(CAEnableDeepFramebuffer=False,
