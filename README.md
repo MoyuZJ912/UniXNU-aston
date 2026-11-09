@@ -5,7 +5,9 @@ It is derived from [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng) `68940
 (Xiaomi Pad 6S Pro, the reference SM8550 board) and follows its iPadOS 27.0.1 (24A446) chain. The package keeps the
 reference kit name `sheng` and the `sheng-*` boot argument names, which the shared scripts address.
 
-Nothing in this repository has run on the phone yet.
+The first phone boot reached SpringBoard with touch on the CPU display path, as recorded in `board.toml`.
+The current CPU and Data changes still need a phone test. See the [fix review](reports/cpu-storage-fix.md) and
+[porting record](porting.toml); inherited sheng results do not qualify aston hardware.
 
 ## OS profile
 
@@ -53,8 +55,23 @@ and arm64 kernel interfaces these sources use.
 The driver checkouts listed in `drivers/submodules.lock` are cloned by `scripts/fetch-aston-drivers.sh` (some carry file
 names Windows cannot hold).
 
-## First-test boot arguments
+## Boot arguments and CPU/Data checks
 
-`board.toml` `[payload] kernel_args` holds the CPU framebuffer display, S3910 touch, keys, all CPUs, CPU frequency, the
-Data store and the diagnostic log on `unixnu`. Add `sheng-battery=2` for the fuel gauge and the GPU arguments listed there
-once the ZAP image is in place.
+`board.toml` `[payload] kernel_args` enables S3910 touch, keys, all CPUs, CPU frequency, persistent Data, the fuel gauge,
+GPU framebuffer presentation and the log on `unixnu`. The package menu also offers the CPU display path.
+`armcpu-edge=1` completes the patched Edge scheduler setup. Touch boosts last 80 ms; the frame-driven CPU floor is disabled.
+
+The first archive step applies the reviewed RamBlock patch to an isolated build-tree copy. It verifies the original pin
+and source hash, rejects tracked source overrides, and writes `build/aston-ramblock/source.json`. Both storage recipes
+use this staged source. Persistent Data is attached before APFS can probe it; an unavailable writable store stops Data
+startup. Reuse the installation's original Data seed when updating. Creating a new seed or selecting Install and boot
+is not part of this fix.
+
+After applying all selected XNU patches, run the native host fixtures (Windows, macOS or Linux):
+
+```sh
+python scripts/check-aston-cpu-storage.py --xnu /path/to/patched/xnu --ramblock /path/to/original/RamBlock --cc clang
+```
+
+The RamBlock checkout must be `4be2d7eb05ef5a98126c91e0302c149140c0e3e1`. Windows can use `--cc /path/to/zig.exe cc`.
+The fixtures exercise policy and publication decisions with API stand-ins. They do not build XNU or execute APFS.

@@ -1,0 +1,78 @@
+diff --git a/docs/drivers/arm-cpu.md b/docs/drivers/arm-cpu.md
+index 59c463f..62d2655 100644
+--- a/docs/drivers/arm-cpu.md
++++ b/docs/drivers/arm-cpu.md
+@@ -15,3 +15,13 @@ The catalog targets ARM GICv3 and the ARM generic timer with the selected XNU AB
+ ## Build
+ 
+ The selected kernel recipe builds `build/armcpu/libArmCpu.a` through `component:ArmCpu`. Enable its kernel configuration and verify the GIC/timer/PSCI resources using the platform adaptation procedure.
++
++## Edge scheduler initialization
++
++With ArmCpu revision `93a5030c5d983d0ef90f0fca93879d6e36ad1ba8`, `armcpu-edge=1` allows the last secondary CPU to call
++`ml_cpu_init_completed()`. Verify the selected XNU cluster matrix before enabling it. Keep the scheduler's matrix assertions:
++QoS restrictions must satisfy its monotonicity rules, which the cluster search uses for early exits.
++
++CPU discovery alone does not establish working cluster migration, idle accounting or power management. Check all three on
++the device. A governor must exclude absent/offline processors from load estimates and rebase accounting after they return.
++Record boost duration, display-driven frequency floors, L3 votes and missing idle or thermal controls in the device's porting record.
+diff --git a/docs/drivers/ram-block.md b/docs/drivers/ram-block.md
+index a11f14f..ba3b8d3 100644
+--- a/docs/drivers/ram-block.md
++++ b/docs/drivers/ram-block.md
+@@ -17,3 +17,17 @@ The catalog records implementation scope, hardware and OS requirements, board de
+ ```
+ 
+ [Component catalog](/reference/components)
++
++## Persistent Data publication
++
++Open and validate persistent backing before publishing the block device to APFS. The first container probe must read the
++same backing as later volume I/O. Attaching the overlay only after discovering the volume UUID can leave APFS holding
++seed checkpoints while reads already return persisted blocks.
++
++RamBlock revision `4be2d7eb05ef5a98126c91e0302c149140c0e3e1` attaches backing during volume selection. Aston stages a patch
++before both storage recipes to attach it before `registerService()`. Its source-storage startup already starts UFS first.
++A requested writable backend that cannot open must not publish a seed-only disk. Preserve the original installation seed
++and reset only through the explicit installation action. Check the source pin and build overrides before reusing this change.
++
++Verify capacity through APFS after mounting Data, then test local Files operations and persistence across a reboot.
++Host publication and overlay fixtures cannot establish filesystem health or application compatibility.
+diff --git a/docs/zh/drivers/arm-cpu.md b/docs/zh/drivers/arm-cpu.md
+index a137de3..9e33008 100644
+--- a/docs/zh/drivers/arm-cpu.md
++++ b/docs/zh/drivers/arm-cpu.md
+@@ -15,3 +15,12 @@ ARM64 CPU、GIC 和定时器驱动。发布 CPU、中断控制器和架构定时
+ ## 构建
+ 
+ 选定内核配方通过 `component:ArmCpu` 构建 `build/armcpu/libArmCpu.a`。启用对应内核配置，按平台适配流程核对 GIC、定时器和 PSCI 资源。
++
++## Edge 调度器初始化
++
++ArmCpu 版本 `93a5030c5d983d0ef90f0fca93879d6e36ad1ba8` 通过 `armcpu-edge=1` 允许最后启动的辅助 CPU 调用
++`ml_cpu_init_completed()`。启用前需检查所选 XNU 的集群矩阵。保留调度器的矩阵断言：QoS 限制必须满足单调性规则，
++集群搜索会据此提前结束。
++
++发现全部 CPU 不等于集群迁移、空闲时间统计和电源管理已经正常。需要分别实机验证。调频器应排除不存在或离线的 CPU，
++并在其恢复后重建采样基准。在设备移植记录中写明加速持续时间、显示活动触发的频率下限、L3 投票及缺失的休眠或温控功能。
+diff --git a/docs/zh/drivers/ram-block.md b/docs/zh/drivers/ram-block.md
+index d49f7c4..3a57d0b 100644
+--- a/docs/zh/drivers/ram-block.md
++++ b/docs/zh/drivers/ram-block.md
+@@ -17,3 +17,16 @@ RamBlock 将 Data 镜像发布为块设备。持久存储接口使用 native_ufs
+ ```
+ 
+ [组件目录](/zh/reference/components)
++
++## 持久化 Data 的发布顺序
++
++在向 APFS 发布块设备之前，打开并验证持久化后端。首次容器探测和后续卷 I/O 必须读取同一后端。
++若发现卷 UUID 后才接入覆盖层，APFS 可能仍缓存 seed 的检查点，而后续读取已变成持久化数据。
++
++RamBlock 版本 `4be2d7eb05ef5a98126c91e0302c149140c0e3e1` 在选择卷时接入后端。Aston 在两种存储构建配方运行前
++应用补丁，将接入提前到 `registerService()` 之前；其 source-storage 启动流程已先启动 UFS。
++请求的可写后端无法打开时，不应发布仅含 seed 的磁盘。保留安装时的原始 seed，仅通过明确的安装操作重置。
++复用此改动前需核对源码版本及本地构建覆盖项。
++
++挂载 Data 后检查 APFS 容量，再验证“文件”的本地操作及重启后的数据持久化。
++主机上的发布顺序和覆盖层测试不能证明文件系统健康或应用兼容性。
