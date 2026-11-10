@@ -21,5 +21,6 @@ CONFIG_XNU_OWNER_UNION_SYSTEMOS=y
 # until the aston Data seed is made on macOS; the payload refuses a seed whose UUID differs, so set it from that seed.
 CONFIG_XNU_OWNER_DATA_VOLUME_UUID="2A5E9027-D9E1-40F9-983C-41BD3F1994F5"
 CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y
-# iOS stage A: the Adreno accelerator ABI is the iPad kernelcache's (abi port pending).
-CONFIG_XNU_NATIVE_ADRENO=n
+# The board objects (display, GPU power, boot diagnostics) call into the Adreno driver, so it is linked; iOS stage A passes no GPU
+# arguments. Its accelerator binds the iPhone17,2 IOAcceleratorES (stage-aston-accelerator-abi.py).
+CONFIG_XNU_NATIVE_ADRENO=y

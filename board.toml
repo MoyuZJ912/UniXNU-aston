@@ -51,6 +51,8 @@ archives = [
   "prepare-sheng-gpu-smmu.py",
   "prepare-sheng-gmu-votes.py",
   "build-adreno740-kits.py",
+  # The IOAcceleratorES ABI of this kernelcache, before the accelerator builder seeds the iPad record.
+  "stage-aston-accelerator-abi.py",
   "build-adreno740-accelerator.py",
   "component:AppleKeyStoreState",
   "build-gop-legacy-display-27.py",
@@ -113,8 +115,8 @@ kernel_args = [
   "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "armcpu-edge=1", "sheng-data-persist=2", "sheng-cpufreq=4",
   # Brief touch boost; continuous display activity must not impose a CPU frequency floor.
   "sheng-cpufreq-boost-ms=80", "sheng-cpufreq-frame-ms=0",
-  # iOS stage A: no GPU arguments. The Adreno accelerator (CONFIG_XNU_NATIVE_ADRENO=n) and the Metal plugin are bound to the iPad
-  # kernelcache and shared cache; the display is the CPU path the first iPadOS boot used.
+  # iOS stage A: no GPU arguments. The Adreno driver is linked (the board objects call into it) with the iPhone17,2 accelerator ABI;
+  # the Metal plugin is still bound to the iPad shared cache. The display is the CPU path the first iPadOS boot used.
   # The battery values come from the pack's fuel gauge (sheng-battery=2); charging itself is the battery manager in the audio DSP, so
   # the DSP is started (sheng-adsp=2, firmware read in place from modem_a, adspslpi 0x9ea00000 + 0x4880000 on this board).
   "sheng-battery=2", "sheng-adsp=2",
