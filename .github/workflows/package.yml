@@ -68,6 +68,9 @@ jobs:
           if ! git submodule update --init --recursive -- drivers/AppleKeyStoreState; then
             git -C drivers/AppleKeyStoreState fetch -q origin 58e5461ed3b751e4c91426b72d8686419abe9550
             git -C drivers/AppleKeyStoreState checkout -q --detach 58e5461ed3b751e4c91426b72d8686419abe9550
+            # unixnu fetch and build run `git submodule update --init --recursive` themselves: record the fallback in this
+            # checkout's index (not committed), so they keep it instead of fetching the missing pin again.
+            git update-index --cacheinfo 160000,58e5461ed3b751e4c91426b72d8686419abe9550,drivers/AppleKeyStoreState
             echo "::warning::AppleKeyStoreState at 58e5461 instead of the unfetchable pin"
           fi
           git submodule status --recursive | awk '{print $1, $2}' | head -40
