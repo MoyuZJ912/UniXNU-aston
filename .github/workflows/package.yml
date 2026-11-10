@@ -200,7 +200,7 @@ jobs:
         run: |
           python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img" \
             --variant "xnu-diag|iOS diag (logs)|log-sys=1 log-power=1" \
-            --variant "xnu-migrate|Rebuild app data (slow, once)|sheng-rerun-migration=1 sheng-staged-apps=1 log-sys=1 log-power=1" \
+            --variant "xnu-migrate|Rebuild app data (slow, once)|sheng-rerun-migration=1 log-sys=1 log-power=1" \
             --variant "xnu-safe|iOS safe (no DSP, no gauge)|!sheng-battery !sheng-adsp log-sys=1 log-power=1"
       - uses: actions/cache/save@v4
         if: always() && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/aston/ios-27.0.1-24A446/aston_ios27/runtime/data.dbr') != ''
