@@ -194,8 +194,9 @@ jobs:
           ./unixnu build kernel payload -D ../UniXNU-aston "${args[@]}"
       - name: Ace 3 menu
         # The payload volume replaces the firmware's menu on this phone: keep "Switch to slot B" as the default.
-        # Variants of the same kernel and Data for comparison on the device: the log-sys/log-power BootLog rows; a one-time rebuild of
-        # the app and group containers (aston-migration-rerun.patch); and the smallest board set (no DSP, no fuel gauge) as a fallback.
+        # Variants of the same kernel and Data: the log-sys/log-power BootLog rows; a one-time rerun of the first-boot data migration
+        # (aston-migration-rerun.patch; no staged apps copy, which the migration refuses as system app upgrades); and the smallest board
+        # set (no DSP, no fuel gauge) as a fallback.
         # iOS stage A has no GPU entry: the Adreno accelerator and the Metal plugin are bound to the iPad kernelcache and shared cache.
         run: |
           python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img" \
