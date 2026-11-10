@@ -134,9 +134,12 @@ jobs:
       - name: iOS 27 profile
         # UniXNU has no iOS profile: unixnu-patches/ adds ios-27.0.1-24A446 (iPhone17,2 D94AP, after markakash/UniXNU-ishtar
         # 0001/0002/0005/0009 with the lockdown board-id) to the pinned checkout, and lets a new seed keep the first-boot migration.
+        # XnuPrelink loads reviewed pins for the iPhone17,2 kernelcache (fa07057b) from its fixtures: UniXNU-ishtar's port of the
+        # iPad17,3 pins plus scripts/derive-fileset-pins.py's. Without them 206 kext calls bind to the unmapped-call stub.
         working-directory: UniXNU
         run: |
           for p in ../UniXNU-aston/unixnu-patches/*.patch; do echo "apply $p"; git apply "$p"; done
+          cp ../UniXNU-aston/scripts/fileset-24A446-d94ap-symbols.json kits/XnuPrelink/fixtures/
       - name: platform seed
         env:
           seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
