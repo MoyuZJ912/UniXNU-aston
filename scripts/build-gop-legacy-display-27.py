@@ -498,9 +498,15 @@ print(f'HID: {len(hid_bindings)} original IOHIDDevice bindings, vtables {hid_vta
 board_dir = OUT / 'board'
 board_dir.mkdir(exist_ok=True)
 KITS = ROOT / 'kits/sheng'
+# aston: the WiFi stack (WifiProbe, WifiNet and the ath12k driver objects, about 0.9 MiB of code) is left out unless ASTON_WIFI=1.
+# The board's WiFi is not ported, and the iPhone17,2 fileset leaves too little room after its retained kexts for the native kernel
+# with it (CI 42813298463: "Native code would collide with collection data"; the iPad17,3 kernel fit with 80 KiB to spare). The
+# board code reaches the WiFi stack only through weak references (LegacyDisplayProbe, BluetoothProbe, BootLog, BootDiagExport).
+WITH_WIFI = os.environ.get('ASTON_WIFI') == '1'
 # As on iPadOS 17, ATH12K_WIFI_DIR names a checkout whose deps/linux holds the driver sources.
 WIFI = Path(os.environ.get('ATH12K_WIFI_DIR') or DEVICE / 'drivers/Ath12kWifi')
-require((WIFI / 'include/nw_abi.h').exists(), 'Ath12kWifi module directory')
+if WITH_WIFI:
+    require((WIFI / 'include/nw_abi.h').exists(), 'Ath12kWifi module directory')
 BLUETOOTH = Path(os.environ.get('QCA_BLUETOOTH_DIR') or
                  (ROOT / 'drivers/QcaBluetooth' if (ROOT / 'drivers/QcaBluetooth').is_dir() else DEVICE / 'drivers/QcaBluetooth'))
 require((BLUETOOTH / 'include/qbt.h').exists(), 'QcaBluetooth module directory')
@@ -508,7 +514,7 @@ board_objects = []
 # The boot screen draws text with Mu-Silicium's Font.h (the panic screen's font), from the firmware tree UNIXNU_UEFI names.
 FONT = Path(os.environ.get('UNIXNU_UEFI') or ROOT / 'uefi-sheng') / 'Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib'
 require((FONT / 'Font.h').exists(), 'Mu-Silicium FrameBufferSerialPortLib/Font.h (UNIXNU_UEFI)')
-for stem, extra in [('AstonBootScreen', ('-I', str(FONT))), ('CpuFreqProbe', ()), ('WifiProbe', ('-I', str(WIFI / 'include'))),
+for stem, extra in [('AstonBootScreen', ('-I', str(FONT))), ('CpuFreqProbe', ())] +                    ([('WifiProbe', ('-I', str(WIFI / 'include')))] if WITH_WIFI else []) + [
                     ('BluetoothProbe', ('-I', str(BLUETOOTH / 'include'), '-I', str(ROOT / 'kits/Sm8550Platform'))),
                     ('AdspProbe', ()), ('AudioProbe', ()),
                     ('BacklightProbe', ()), ('DisplayTimingProbe', ()), ('BatteryProbe', ()),
@@ -517,7 +523,8 @@ for stem, extra in [('AstonBootScreen', ('-I', str(FONT))), ('CpuFreqProbe', ())
                                                         'kits/Sm8550Platform') for x in ('-I', str(ROOT / d))))]:
     compile_cpp(KITS / (stem + '.cpp'), board_dir / (stem + '.o'), extra)
     board_objects.append(board_dir / (stem + '.o'))
-for stem, extra in [('WifiNet', ('-I', str(WIFI / 'include'))), ('AppleARMBacklight', ()), ('ShengBattery', ()), ('ShengAudioService', ())]:
+for stem, extra in ([('WifiNet', ('-I', str(WIFI / 'include')))] if WITH_WIFI else []) + [
+        ('AppleARMBacklight', ()), ('ShengBattery', ()), ('ShengAudioService', ())]:
     compile_cpp(KITS / (stem + '.cpp'), board_dir / (stem + '.o'), extra)
     run([llvm / 'llvm-objcopy', '--remove-section=__DATA,__mod_init_func', f'--globalize-symbol=__GLOBAL__sub_I_{stem}.cpp',
          board_dir / (stem + '.o'), board_dir / (stem + '.late.o')])
@@ -530,8 +537,9 @@ for stem in ('QcomMdt', 'FatVolume', 'QcomQrtr', 'ShengQrtr', 'QcomSmem', 'QcomS
 # The audio DSP's firmware file reader goes through the VFS: BSD flags.
 compile_c(KITS / 'AdspFirmware.c', board_dir / 'AdspFirmware.o', 'bsd/DEVELOPMENT/kern_exec.o.json')
 board_objects.append(board_dir / 'AdspFirmware.o')
-board_objects += [Path(line.split(' ', 1)[1]) for line in run(['python3', ROOT / 'scripts/build-ath12k-wifi.py', WIFI, board_dir / 'ath12k-wifi'],
-                                                                    text=True).splitlines() if line.startswith('OBJ ')]
+if WITH_WIFI:
+    board_objects += [Path(line.split(' ', 1)[1]) for line in run(['python3', ROOT / 'scripts/build-ath12k-wifi.py', WIFI,
+                                                                   board_dir / 'ath12k-wifi'], text=True).splitlines() if line.startswith('OBJ ')]
 board_objects += [Path(line.split(' ', 1)[1]) for line in run(['python3', ROOT / 'scripts/build-qca-bluetooth.py', BLUETOOTH,
     board_dir / 'qca-bluetooth', '--tree', ROOT], text=True).splitlines() if line.startswith('OBJ ')]
 input_objects += board_objects

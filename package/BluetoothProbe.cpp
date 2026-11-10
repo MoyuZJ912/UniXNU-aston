@@ -24,7 +24,7 @@ extern "C" int armcpu_spi_attach(uint32_t,bool,void(*)(void *),void *,uint32_t *
 extern "C" int armcpu_spi_share(uint32_t,void(*)(void *),void *);
 extern "C" int armcpu_spi_mask(uint32_t,bool);
 extern "C" volatile int native_gpu_addon_stage;
-extern "C" volatile uint32_t native_wifi_stats[29];
+extern "C" volatile uint32_t native_wifi_stats[29] __attribute__((weak_import));  // absent without ASTON_WIFI=1
 extern "C" {
 volatile uint64_t native_bluetooth_stats[32];
 uint8_t native_bluetooth_boot_rx[512];
@@ -428,7 +428,7 @@ void worker(void *,wait_result_t) {
     while(native_gpu_addon_stage<1)waitUntil(nullptr,nowNs(nullptr)+10000000ULL);
     /* Wi-Fi settles WLAN_EN and the shared supplies first; its failure stage is negative. */
     unsigned wifi=0;PE_parse_boot_argn("sheng-wifi",&wifi,sizeof(wifi));
-    if(wifi>=2) {
+    if(wifi>=2 && &native_wifi_stats) {
         uint64_t end=nowNs(nullptr)+15000000000ULL;
         while(nowNs(nullptr)<end) {
             int32_t stage=(int32_t)native_wifi_stats[0];

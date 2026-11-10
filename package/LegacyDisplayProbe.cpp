@@ -500,7 +500,7 @@ extern void native_keystore_probe(void);
 extern void native_touch_probe(void);
 extern void sheng_cpufreq_probe(void);
 extern void sheng_gpu_power_probe(void);
-extern void sheng_wifi_probe(void);
+extern void sheng_wifi_probe(void) __attribute__((weak_import));  // absent without ASTON_WIFI=1
 extern void sheng_bluetooth_probe(void) __attribute__((weak_import));
 extern void sheng_usb_probe(void) __attribute__((weak_import));
 extern void sheng_adsp_probe(void);
@@ -516,7 +516,7 @@ void native_legacy_display_late_probe(void) {
     sheng_cpufreq_probe();
     sheng_gpu_power_probe();
     native_touch_probe();
-    sheng_wifi_probe();
+    if (sheng_wifi_probe) sheng_wifi_probe();
     if (sheng_bluetooth_probe) sheng_bluetooth_probe();
     if (sheng_usb_probe) sheng_usb_probe();
     sheng_adsp_probe();

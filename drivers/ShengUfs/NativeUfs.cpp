@@ -1309,37 +1309,72 @@ extern "C" int native_ufs_store_open (uint64_t blocks, uint64_t *firstLba, const
   return ok;
 }
 
+// Store window commands, in mach_absolute_time ticks: count and time of reads, writes and cache flushes, and the longest single call.
+extern "C" volatile uint64_t native_ufs_store_rd_ops = 0, native_ufs_store_rd_ticks = 0, native_ufs_store_wr_ops = 0,
+                             native_ufs_store_wr_ticks = 0, native_ufs_store_sync_ops = 0, native_ufs_store_sync_ticks = 0,
+                             native_ufs_store_max_ticks = 0;
+static void storeAccount (volatile uint64_t *ops, volatile uint64_t *ticks, uint64_t t0)
+{
+  const uint64_t spent = mach_absolute_time () - t0;
+  __atomic_fetch_add (ops, 1, __ATOMIC_RELAXED);
+  __atomic_fetch_add (ticks, spent, __ATOMIC_RELAXED);
+  uint64_t seen = native_ufs_store_max_ticks;
+  while (spent > seen && !__atomic_compare_exchange_n (&native_ufs_store_max_ticks, &seen, spent, false, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) { }
+}
+
 extern "C" int native_ufs_store_read (uint64_t rel, uint32_t blocks, void *dst)
 {
   if (!gStoreRegionBlocks || !dst || !blocks || rel >= gStoreRegionBlocks || blocks > gStoreRegionBlocks - rel) return 0;
+  const uint64_t t0 = mach_absolute_time ();
+  int ok = 1;
   while (blocks) {
     uint32_t chunk = blocks > kDataMax / 4096 ? static_cast<uint32_t> (kDataMax / 4096) : blocks;
-    if (hostRead4k (0, gStoreRegionFirst + rel, chunk, dst) != kIOReturnSuccess) return 0;
+    if (hostRead4k (0, gStoreRegionFirst + rel, chunk, dst) != kIOReturnSuccess) { ok = 0; break; }
     dst = static_cast<uint8_t *> (dst) + chunk * 4096ULL;
     rel += chunk;
     blocks -= chunk;
   }
-  return 1;
+  storeAccount (&native_ufs_store_rd_ops, &native_ufs_store_rd_ticks, t0);
+  return ok;
 }
 
-extern "C" int native_ufs_store_write (uint64_t rel, uint32_t blocks, const void *src)
+static int storeWrite (uint64_t rel, uint32_t blocks, const void *src, bool fua)
 {
   if (storeMode () != 2 || !gStoreRegionBlocks || !src || !blocks || rel >= gStoreRegionBlocks ||
       blocks > gStoreRegionBlocks - rel) return 0;
+  const uint64_t t0 = mach_absolute_time ();
+  int ok = 1;
   while (blocks) {
     uint32_t chunk = blocks > kDataMax / 4096 ? static_cast<uint32_t> (kDataMax / 4096) : blocks;
-    // Forced unit access: the block is on the medium when the command completes, so the overlay needs no cache flush.
-    if (hostWrite4k (0, gStoreRegionFirst + rel, chunk, src, true) != kIOReturnSuccess) return 0;
+    if (hostWrite4k (0, gStoreRegionFirst + rel, chunk, src, fua) != kIOReturnSuccess) { ok = 0; break; }
     src = static_cast<const uint8_t *> (src) + chunk * 4096ULL;
     rel += chunk;
     blocks -= chunk;
   }
-  return 1;
+  storeAccount (&native_ufs_store_wr_ops, &native_ufs_store_wr_ticks, t0);
+  return ok;
+}
+
+// Forced unit access: the block is on the medium when the command completes, so a write-through overlay needs no cache flush.
+extern "C" int native_ufs_store_write (uint64_t rel, uint32_t blocks, const void *src)
+{
+  return storeWrite (rel, blocks, src, true);
+}
+
+// No forced unit access: the device may keep the blocks in its volatile write cache until native_ufs_store_sync. For a
+// write-back overlay, which makes its pages durable with a sync before it writes the bitmap blocks that name them.
+extern "C" int native_ufs_store_write_cached (uint64_t rel, uint32_t blocks, const void *src)
+{
+  return storeWrite (rel, blocks, src, false);
 }
 
 extern "C" int native_ufs_store_sync (void)
 {
-  return storeMode () == 2 && gStoreRegionBlocks && hostSyncCache () == kIOReturnSuccess;
+  if (storeMode () != 2 || !gStoreRegionBlocks) return 0;
+  const uint64_t t0 = mach_absolute_time ();
+  const int ok = hostSyncCache () == kIOReturnSuccess;
+  storeAccount (&native_ufs_store_sync_ops, &native_ufs_store_sync_ticks, t0);
+  return ok;
 }
 
 // ---- Read-only access to other partitions, by GPT name ------------------------------------------------------------
