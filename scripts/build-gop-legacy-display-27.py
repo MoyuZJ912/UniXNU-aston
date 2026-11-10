@@ -23,12 +23,17 @@ sys.path.insert(0, str(ROOT / 'kits/XnuPrelink'))
 # The fileset the class fixtures belong to, chosen by the root OS volume of the selected profile (UNIXNU_ROOT_OS_UUID): iPad17,3
 # (ipados-27.0.1-24A446, the reviewed records) or iPhone17,2 (ios-27.0.1-24A446: the same records ported with
 # markakash/UniXNU-ishtar scripts/kc-port.py, every address verified, 0 failures). Each fixture must name that kernelcache.
-FILESETS = {'2F8E6EED-68D5-4261-B8A3-12571BAA2DD4': ('', '38e6d9fa5f789b8228f4617ef4c6d2a3fd8ab564abdc9b62920f1db53fc1780a'),
-            'E3F4AED0-4454-4D5B-833C-E27E99C4F67B': ('-d94ap', 'fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95')}
+# Two checks below also need fileset addresses: the IOMobileGraphicsFamily text the owned display's inherited slots must not reach
+# (its __TEXT_EXEC + 0x5390 up to the page after it), and the start of the kernel's own __TEXT_EXEC, below which an inherited
+# AppleUSBXHCI slot reaches a kext override (on iPad17,3 this selects the same 24 slots as the former 0xfffffe000b000000).
+FILESETS = {'2F8E6EED-68D5-4261-B8A3-12571BAA2DD4': ('', '38e6d9fa5f789b8228f4617ef4c6d2a3fd8ab564abdc9b62920f1db53fc1780a',
+                                                     (0xfffffe000a27c000, 0xfffffe000a29a000), 0xfffffe000acb4000),
+            'E3F4AED0-4454-4D5B-833C-E27E99C4F67B': ('-d94ap', 'fa07057bf34f33af1ec26681ad0c87c13e5aaa548a300740eddb0e92876e5f95',
+                                                     (0xfffffff00a17cc80, 0xfffffff00a19b000), 0xfffffff00ab48000)}
 ROOT_OS = os.environ.get('UNIXNU_ROOT_OS_UUID', '').upper()
 if ROOT_OS not in FILESETS:
     raise SystemExit(f'No class fixtures for the root OS volume {ROOT_OS or "(UNIXNU_ROOT_OS_UUID unset)"}')
-FIXTURE_SUFFIX, FIXTURE_KERNELCACHE = FILESETS[ROOT_OS]
+FIXTURE_SUFFIX, FIXTURE_KERNELCACHE, FAMILY_TEXT, KERNEL_TEXT = FILESETS[ROOT_OS]
 
 
 def fixture(name):
@@ -239,7 +244,7 @@ require(all(compiled) and vtable + 16 + len(slots) * 8 not in entries, f'Exact o
 for i, (name, word) in enumerate(compiled):
     require(word >> 63 and word >> 48 & 1 and word >> 49 & 3 == 0 and (word >> 32) & 0xffff == slots[i][1],
             f'Slot {i} ({name}) signed with IA, address diversity and the original diversity {slots[i][1]:#x}')
-family = range(0xfffffe000a27c000, 0xfffffe000a29a000)
+family = range(*FAMILY_TEXT)
 bindings = {name: int(va, 16) + slide for name, va in abi['bindings'].items()}
 owned, native = [], []
 for i, (name, _) in enumerate(compiled):
@@ -652,7 +657,7 @@ for i, (name, word) in enumerate(xhci_entries):
     elif not name.startswith(('__ZN12QcomDwc3Xhci', '__ZNK12QcomDwc3Xhci')):
         require(i < 168, f'{xhci_vt} slot {i} ({name}) is inherited from IOService')
 # Targets below the kernel's text are the original's overrides in its kexts.
-xhci_io = {i for i, (t, _) in enumerate(xhci_slots[:168]) if t < 0xfffffe000b000000 and i not in (0, 1, 7)}
+xhci_io = {i for i, (t, _) in enumerate(xhci_slots[:168]) if t < KERNEL_TEXT and i not in (0, 1, 7)}
 for i in sorted(xhci_io):
     require('12AppleUSBXHCI' in xhci_entries[i][0] or 'QcomDwc3Xhci' in xhci_entries[i][0], f'{xhci_vt} slot {i} ({xhci_entries[i][0]}) reaches the original override')
 xhci_slot_by_diversity = {d: i for i, (_, d) in enumerate(xhci_slots)}

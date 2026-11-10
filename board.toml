@@ -34,6 +34,8 @@ patch_series = ["arch:patches/xnu/series", "soc:patches/xnu-12377/series", "os:p
 # generators still read the reference board's devicetree for the GPU inputs (the same kalama GPU and GMU nodes).
 archives = [
   "prepare-aston-ramblock.py",
+  # Before any storage step: component:ShengUfs runs build-sheng-source-storage.py without --policy-dir.
+  "stage-aston-root-policies.py scripts/policies/ios-27.0.1-24A446",
   "build-corecrypto-14.py",
   "build-corecrypto-14.py --namespace",
   "component:ArmDTPlatform",
