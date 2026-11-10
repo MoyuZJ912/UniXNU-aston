@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Add the GMU kit and firmware planner objects to the NativeAdreno archive."""
-import hashlib, json, subprocess, sys
+import hashlib, json, os, subprocess, sys
 from pathlib import Path
 from kernel_target import TRIPLE
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,8 +71,19 @@ aston_local = ROOT / '.cache/firmware/aston-gpu'
 embedded = [('_native_adreno_firmware_image', 'qcom/gmu_gen70200.bin'),
             ('_native_adreno_sqe_firmware_image', 'qcom/a740_sqe.fw'),
             ('_native_adreno_zap_image', aston_zap)]
+# aston: the images are 151 KiB of the native __DATA_CONST, which the iPhone17,2 collection limits to the room before
+# AppleARMPlatform's constants. Only a GPU bring-up uses them (GpuPowerProbe with sheng-gpu-power, NativeAdreno's GMU and
+# SQE start), so they are embedded with ASTON_GPU_FIRMWARE=1. Without it every image is empty: NativeAdrenoFirmware refuses
+# a zero length and GpuPowerProbe stops at the ZAP step, as it did before the aston ZAP pin.
+WITH_GPU_FIRMWARE = os.environ.get('ASTON_GPU_FIRMWARE') == '1'
+if not WITH_GPU_FIRMWARE:
+    print('GPU firmware not embedded (ASTON_GPU_FIRMWARE is not 1): the kernel carries empty GMU, SQE and ZAP images')
 assembly = ['.section __DATA_CONST,__const']
 for label, key in embedded:
+    if not WITH_GPU_FIRMWARE:
+        assembly += ['.p2align 3', '.globl ' + label, label + ':', label + '_end:',
+                     '.globl ' + label + '_size', label + '_size:', '.quad 0']
+        continue
     if key == aston_zap:
         pin = aston_pins[key]
         path = aston_local / key

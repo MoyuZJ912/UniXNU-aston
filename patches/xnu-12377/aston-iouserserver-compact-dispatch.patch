@@ -1,0 +1,33 @@
+--- a/iokit/Kernel/IOUserServer.cpp
++++ b/iokit/Kernel/IOUserServer.cpp
+@@ -4556,7 +4556,7 @@ IOReturn
+ IOUserServer::externalMethod(uint32_t selector, IOExternalMethodArgumentsOpaque * args)
+ {
+ 	static const IOExternalMethodDispatch2022 dispatchArray[] = {
+-		[kIOUserServerMethodRegisterClass] = {
++		[kIOUserServerMethodRegisterClass - kIOUserServerMethodRegisterClass] = {
+ 			.function                 = &IOUserServer::externalMethodRegisterClass,
+ 			.checkScalarInputCount    = 0,
+ 			.checkStructureInputSize  = kIOUCVariableStructureSize,
+@@ -4565,7 +4565,7 @@ IOUserServer::externalMethod(uint32_t selector, IOExternalMethodArgumentsOpaque
+ 			.allowAsync               = false,
+ 			.checkEntitlement         = NULL,
+ 		},
+-		[kIOUserServerMethodStart] = {
++		[kIOUserServerMethodStart - kIOUserServerMethodRegisterClass] = {
+ 			.function                 = &IOUserServer::externalMethodStart,
+ 			.checkScalarInputCount    = 1,
+ 			.checkStructureInputSize  = 0,
+@@ -4576,7 +4576,11 @@ IOUserServer::externalMethod(uint32_t selector, IOExternalMethodArgumentsOpaque
+ 		},
+ 	};
+ 
+-	return dispatchExternalMethod(selector, args, dispatchArray, sizeof(dispatchArray) / sizeof(dispatchArray[0]), this, NULL);
++	// aston: the selectors start at 0x1000, and a table indexed by them is 4098 entries, 160 KiB of __DATA_CONST holding two
++	// methods: more than the iPhone17,2 collection leaves between the kernel's constants and AppleARMPlatform's. Index from
++	// the first selector instead. One below it wraps past the end and is refused (it found an empty entry before).
++	return dispatchExternalMethod(selector - kIOUserServerMethodRegisterClass, args, dispatchArray,
++	           sizeof(dispatchArray) / sizeof(dispatchArray[0]), this, NULL);
+ }
+ 
+ IOReturn

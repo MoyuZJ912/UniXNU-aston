@@ -250,6 +250,19 @@ jobs:
             ${{ env.WORK }}/tree/build/xnu/fileset-reference/*/*-build.log
             ${{ env.WORK }}/tree/build/xnu/fileset-reference/*/native-stubs.c
             ${{ env.WORK }}/tree/build/xnu/fileset-reference/*/omitted-unavailable-forced-exports.json
+      # A failed prelink can be rerun offline with emit_prelink.py and the iPhone17,2 kernelcache: the native kernel, the
+      # release reference it is matched with, and the pairing map, so one CI run is enough to bisect a layout or binding error.
+      - name: prelink inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prelink-inputs
+          retention-days: 3
+          include-hidden-files: true
+          path: |
+            ${{ env.WORK }}/tree/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf
+            ${{ env.WORK }}/tree/build/xnu/fileset-reference/mach.release.bcm2837.unstripped.noctf
+            ${{ env.WORK }}/kernel/.prelink-*/*.json
       - name: images
         uses: actions/upload-artifact@v4
         with:
