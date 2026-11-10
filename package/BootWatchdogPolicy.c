@@ -45,7 +45,7 @@ char PE_builtin_boot_args[]="owner-staged-apps=1 owner-dataprotect=1 sheng-disab
 static char policy[2048],jobs[200];
 volatile int sheng_watchdog_policy_status=-1;
 
-// sheng-setup=1 or sheng-data-reset=2 (the install entry's "show Hello" choice): remove Setup's completion flags once, so this boot shows the Hello page.
+// sheng-setup=1 or data-reset=2 (the install entry's "show Hello" choice): remove Setup's completion flags once, so this boot shows the Hello page.
 // iPadOS writes them again when Setup finishes, so later boots do not show it. Absent files are fine.
 static int sheng_boot_setup_reset(proc_t p,uint64_t scratch) {
  static const char *const files[]={
@@ -84,7 +84,9 @@ int sheng_boot_watchdog_policy(void *process, uint64_t scratch) {
  for(const char *c=jobs;*c;++c)if(!((*c>='a'&&*c<='z')||(*c>='A'&&*c<='Z')||(*c>='0'&&*c<='9')||*c=='.'||*c=='-'||*c==','))return EINVAL;
  int setup=0,reset=0;
  PE_parse_boot_argn("sheng-setup",&setup,sizeof(setup));
- PE_parse_boot_argn("sheng-data-reset",&reset,sizeof(reset));   // 2 = erase Data and show the Hello page; 1 = erase Data, Setup stays skipped
+ // 2 = erase Data and show the Hello page; 1 = erase Data, Setup stays skipped. RamBlock (UniXNU 47ec6a5 and later) reads data-reset;
+ // the former sheng-data-reset is still honoured here.
+ if(!PE_parse_boot_argn("data-reset",&reset,sizeof(reset)))PE_parse_boot_argn("sheng-data-reset",&reset,sizeof(reset));
  if(reset==2)setup=1;
  if(setup==1 && (error=sheng_boot_setup_reset(p,scratch))) {
   sheng_watchdog_policy_status=error;

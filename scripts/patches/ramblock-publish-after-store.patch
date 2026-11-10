@@ -1,18 +1,6 @@
 --- a/NativeRamBlock.cpp
 +++ b/NativeRamBlock.cpp
-@@ -73,9 +73,9 @@
-   };
-   void persistFailed() { overlay.active = false; native_data_persist_state = 5; __atomic_fetch_add(&native_data_persist_errors, 1, __ATOMIC_RELAXED); }
- public:
--  // Called once, before the Data volume is mounted (native_ram_block_volume_seed): open the store window, put the pages that
-+  // Called once, before registerService lets APFS probe the disk: open the store window, put the pages that
-   // earlier boots changed back into the sparse disk, and from then on write changed pages through. The seed identity
--  // (seedHash) is not affected. Any refusal or error leaves the disk volatile, exactly as without persistence.
-+  // (seedHash) is not affected. A requested writable store must be ready before the disk is published.
-   // sheng-data-reset=1 or 2 (the boot menu's Install and boot) starts the overlay over (the old pages are dropped, not applied); 2 also
-   // asks for Setup (BootWatchdogPolicy.c). It is the only way the store is made anew: a store of another seed, a blank or a damaged one
-   // is kept as it is on any other boot.
-@@ -154,6 +154,22 @@
+@@ -306,6 +306,22 @@
      IOLockUnlock(gate);
    }
  
@@ -35,7 +23,7 @@
    bool available() const { return online && (memory || sparse.pages || isBig) && capacity; }
    bool seedInfo(uint64_t *base,uint64_t *bytes,uint8_t hash[32]) {
      if(!gate || !base || !bytes || !hash)return false;
-@@ -249,10 +265,7 @@
+@@ -404,10 +420,7 @@
    native_ram_block_bytes = logical;
    native_ram_block_sparse=(sparse.pages||isBig)?1:0;
    native_ram_block_resident_bytes=isBig?big.resident:sparse.pages?sparse.resident:logical;
@@ -47,8 +35,8 @@
  }
  
  IOReturn NativeRamBlock::doAsyncReadWrite(IOMemoryDescriptor *buffer, UInt64 block, UInt64 count,
-@@ -267,8 +280,7 @@
-   if (!online) { IOLockUnlock(gate); return kIOReturnNotReady; }
+@@ -445,8 +458,7 @@
+   }
    uint64_t actual;bool noMemory=false;
    if(isBig && !direct) {
 -    // Before the store is attached (APFS probes the disk for its volume UUID long before the kernel asks for the Data volume, which is what
@@ -57,7 +45,7 @@
      if(buffer->getDirection()==kIODirectionIn) {
        struct SeedReadOps {
          IOMemoryDescriptor *buffer;
-@@ -411,7 +423,6 @@
+@@ -643,7 +655,6 @@
      for (IOService *provider = media; provider && depth++ < 64; provider = provider->getProvider()) {
        NativeRamBlock *ram = OSDynamicCast(NativeRamBlock, provider);
        if (!ram) continue;

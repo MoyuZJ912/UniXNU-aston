@@ -11,8 +11,8 @@ from pathlib import Path
 import shutil
 import subprocess
 
-PIN = '4be2d7eb05ef5a98126c91e0302c149140c0e3e1'
-SOURCE_SHA256 = '17dcb4bac69e46346d5b100ac64a9371ec61281a4f84504e4d2f74f9e123a2e1'
+PIN = '60a54ce8f86161db958fd8e6edf577081b3c9ae7'
+SOURCE_SHA256 = '8e47a517e5c30ae85e0a706ff97ef7710aacadfaa7c6c4da5a22b52f4880b2f0'
 PATCH = Path(__file__).resolve().parent / 'patches/ramblock-publish-after-store.patch'
 
 

@@ -112,18 +112,20 @@ kernel_args = [
   "offline-legacy-cpu-present=1", "offline-legacy-phase=4", "offline-key-events=1",
   "sheng-aks=1", "offline-hid-input=1", "offline-hid-home=1",
   "sheng-touch=4", "sheng-touch-hid=1", "sheng-buttons=1", "sheng-log=1",
-  "sheng-smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "armcpu-edge=1", "sheng-data-persist=2", "sheng-cpufreq=4",
+  "smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "armcpu-edge=1", "sheng-data-persist=2", "sheng-cpufreq=4",
   # Brief touch boost; continuous display activity must not impose a CPU frequency floor.
   "sheng-cpufreq-boost-ms=80", "sheng-cpufreq-frame-ms=0",
   # iOS stage A: no GPU arguments. The Adreno driver is linked (the board objects call into it) with the iPhone17,2 accelerator ABI;
-  # the Metal plugin is still bound to the iPad shared cache. The display is the CPU path the first iPadOS boot used.
+  # the Metal plugin is not built ([payload.runtime] gpu_addon). The display is the CPU path the first iPadOS boot used.
+  # UniXNU 47ec6a5 dropped the sheng- prefix from the arguments its drivers and patches read: smp (ArmCpu), vsync and vsync-fixed
+  # (GopFramebuffer), no-lc (zzyc-owner-skip-launch-constraints), data-reset (RamBlock). This board's own code keeps sheng-*.
   # The battery values come from the pack's fuel gauge (sheng-battery=2); charging itself is the battery manager in the audio DSP, so
   # the DSP is started (sheng-adsp=2, firmware read in place from modem_a, adspslpi 0x9ea00000 + 0x4880000 on this board).
   "sheng-battery=2", "sheng-adsp=2",
   # No sheng-staged-apps: on 27 the deletable system apps come through the staged apps union, and a copy in Data makes the
   # first-boot migration install them as system app upgrades, which installd refuses ("System app upgrade is missing upgrade
   # entitlement"; iPadOS boot 6, DMLastMigrationResults success = false).
-  "sheng-no-lc=1", "sheng-vsync=60", "sheng-vsync-fixed=1", "sheng-disable-watchdogd=1", "sheng-lite=1",
+  "no-lc=1", "vsync=60", "vsync-fixed=1", "sheng-disable-watchdogd=1", "sheng-lite=1",
 ]
 
 [payload.runtime]
@@ -138,6 +140,8 @@ skip_setup = true
 trust_components = ["StaticTrustCache", "Cryptex1,SystemTrustCache", "Cryptex1,AppTrustCache"]
 # The iPadOS 27 wallpaper overlays name iPad paths; iOS has none yet.
 wallpapers = []
+# No Metal plugin or wallpaper addon in stage A: the plugin is bound to the iPad shared cache.
+gpu_addon = false
 
 [payload.runtime.launchd_job_environment."com.apple.iconservices.iconservicesagent"]
 FORCE_SOFTWARE_RENDERER = "0"
@@ -147,7 +151,8 @@ CI_ENABLE_METAL_GPU = "0"
 title = "Install and boot"
 confirm = "ERASE all iOS user data and install again?"
 confirm_titles = ["Erase Data, skip Hello, boot", "Erase Data, show Hello, boot"]
-confirm_args = ["sheng-data-reset=1", "sheng-data-reset=2"]
+# RamBlock reads data-reset (UniXNU 47ec6a5); BootWatchdogPolicy.c reads it too.
+confirm_args = ["data-reset=1", "data-reset=2"]
 
 [payload.adt]
 chip_id = "8142"
