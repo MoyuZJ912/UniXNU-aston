@@ -136,9 +136,17 @@ jobs:
         # 0001/0002/0005/0009 with the lockdown board-id) to the pinned checkout, and lets a new seed keep the first-boot migration.
         # XnuPrelink loads reviewed pins for the iPhone17,2 kernelcache (fa07057b) from its fixtures: UniXNU-ishtar's port of the
         # iPad17,3 pins plus scripts/derive-fileset-pins.py's. Without them 206 kext calls bind to the unmapped-call stub.
+        # unixnu-patches/<component>/ patch that submodule: the Metal plugin's QuartzCore addresses keyed by shared cache, so the
+        # iPhone17,2 cache gets its own and an unknown one none (the plugin's iPad addresses would land 0x4000 off in QuartzCore's data).
         working-directory: UniXNU
         run: |
           for p in ../UniXNU-aston/unixnu-patches/*.patch; do echo "apply $p"; git apply "$p"; done
+          for d in ../UniXNU-aston/unixnu-patches/*/; do
+            c=$(basename "$d"); path=drivers/$c
+            [ -d "$path" ] || path=kits/$c
+            [ -d "$path" ] || { echo "no component checkout for $c"; exit 1; }
+            for p in "$d"*.patch; do echo "apply $p in $path"; git -C "$path" apply "$(pwd)/$p"; done
+          done
           cp ../UniXNU-aston/scripts/fileset-24A446-d94ap-symbols.json kits/XnuPrelink/fixtures/
       - name: platform seed
         env:
@@ -219,13 +227,12 @@ jobs:
         # The payload volume replaces the firmware's menu on this phone: keep "Switch to slot B" as the default.
         # Variants of the same kernel and Data: the log-sys/log-power BootLog rows; a one-time rerun of the first-boot data migration
         # (aston-migration-rerun.patch; no staged apps copy, which the migration refuses as system app upgrades); and the smallest board
-        # set (no DSP, no fuel gauge) as a fallback.
-        # iOS stage A has no GPU entry: the Metal plugin is not built yet (it is bound to the iPad shared cache).
+        # set as a fallback: the CPU display path (no GPU, no Metal addon), no DSP, no fuel gauge.
         run: |
           python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img" \
             --variant "xnu-diag|iOS diag (logs)|log-sys=1 log-power=1" \
             --variant "xnu-migrate|Rebuild app data (slow, once)|sheng-rerun-migration=1 log-sys=1 log-power=1" \
-            --variant "xnu-safe|iOS safe (no DSP, no gauge)|!sheng-battery !sheng-adsp log-sys=1 log-power=1"
+            --variant "xnu-safe|iOS safe (CPU display)|!sheng-gpu-power !sheng-gpu-metal !sheng-fb-gpu !fb-gpu !fb-bgra !sheng-gpu-dcvs !gpu-addon !sheng-battery !sheng-adsp log-sys=1 log-power=1"
       - uses: actions/cache/save@v4
         if: always() && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/aston/ios-27.0.1-24A446/aston_ios27/runtime/data.dbr') != ''
         with:

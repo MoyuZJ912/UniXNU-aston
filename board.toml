@@ -115,8 +115,12 @@ kernel_args = [
   "smp=1", "armcpu-spi-ipi=1", "armcpu-self-ipi=1", "armcpu-edge=1", "sheng-data-persist=2", "sheng-cpufreq=4",
   # Brief touch boost; continuous display activity must not impose a CPU frequency floor.
   "sheng-cpufreq-boost-ms=80", "sheng-cpufreq-frame-ms=0",
-  # iOS stage A: no GPU arguments. The Adreno driver is linked (the board objects call into it) with the iPhone17,2 accelerator ABI;
-  # the Metal plugin is not built ([payload.runtime] gpu_addon). The display is the CPU path the first iPadOS boot used.
+  # GPU (stage B), as on iPadOS b5bb234: the A740 powered with its GMU and SQE firmware and this phone's ZAP (sheng-gpu-power=9,
+  # sheng-gpu-metal=1, sheng-gpu-dcvs=1: GpuPowerProbe), each frame written by the GPU into the firmware framebuffer (sheng-fb-gpu=1
+  # for LegacyDisplayProbe, fb-gpu=1 for GopFramebuffer's presenter), 8-bit BGRA in the render server (fb-bgra=1, the Metal plugin)
+  # and the Metal -> Vulkan addon mounted (gpu-addon=1, zzy-native-gpu-addon-mount). The plugin writes QuartzCore's options only in a
+  # shared cache it knows (unixnu-patches/AdrenoMetal: the iPhone17,2 cache 1892D244 as well as the iPad's).
+  "sheng-gpu-power=9", "sheng-gpu-metal=1", "sheng-fb-gpu=1", "fb-gpu=1", "fb-bgra=1", "sheng-gpu-dcvs=1", "gpu-addon=1",
   # UniXNU 47ec6a5 dropped the sheng- prefix from the arguments its drivers and patches read: smp (ArmCpu), vsync and vsync-fixed
   # (GopFramebuffer), no-lc (zzyc-owner-skip-launch-constraints), data-reset (RamBlock). This board's own code keeps sheng-*.
   # The battery values come from the pack's fuel gauge (sheng-battery=2); charging itself is the battery manager in the audio DSP, so
@@ -140,8 +144,8 @@ skip_setup = true
 trust_components = ["StaticTrustCache", "Cryptex1,SystemTrustCache", "Cryptex1,AppTrustCache"]
 # The iPadOS 27 wallpaper overlays name iPad paths; iOS has none yet.
 wallpapers = []
-# No Metal plugin or wallpaper addon in stage A: the plugin is bound to the iPad shared cache.
-gpu_addon = false
+# The Metal plugin (Turnip and metal2vulkan) in the GPU addon, without wallpapers.
+gpu_addon = true
 
 [payload.runtime.launchd_job_environment."com.apple.iconservices.iconservicesagent"]
 FORCE_SOFTWARE_RENDERER = "0"

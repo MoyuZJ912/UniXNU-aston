@@ -5,6 +5,11 @@ Stdlib only. Finds the newest valid container superblock in the checkpoint area,
 map, walks the volume's file-system tree once and then lists or extracts files. Never writes the image. Encrypted volumes, compressed
 (decmpfs) files and snapshots are not handled: compressed files are reported, encrypted volumes refused.
 
+Sealed volumes (the IPSW's OS and SystemOS images) are read too: their file-system tree is hashed and headerless, its index entries
+store each child's virtual object id less the tree root's (24A446 iPhone17,2 SystemOS: all 7027 child links check out only that way;
+the reader picks the base that gives the root's first child the next lower level and checks every child's level), and file extents
+live in the separate physical fext tree.
+
 usage: apfs-read.py IMAGE [--volume N] ls PATH            list a directory (size, modification time, name)
        apfs-read.py IMAGE [--volume N] find SUBSTRING     every path containing SUBSTRING
        apfs-read.py IMAGE [--volume N] get PATH OUTFILE   copy one file out
@@ -97,15 +102,19 @@ class Container:
                 return struct.unpack_from('<IIQ', pick[2])[2] if pick[0] == oid else None
             paddr = struct.unpack_from('<Q', pick[2])[0]
 
-    def walk(self, root, resolve):
-        """Every (key, value) of a tree whose child pointers are virtual (resolve maps them to blocks)."""
-        stack = [root]
+    def walk(self, root, resolve, base=0):
+        """Every (key, value) of a tree whose child pointers are virtual (resolve maps them to blocks); base is added to each
+        stored child id. Each child must be one level below its parent."""
+        stack = [(root, None)]
         while stack:
-            flags, level, entries = self.node(stack.pop())
+            paddr, expect = stack.pop()
+            flags, level, entries = self.node(paddr)
+            if expect is not None and level != expect:
+                raise SystemExit(f'B-tree node at block {paddr} has level {level}, its parent expects {expect}')
             if level == 0:
                 yield from entries
             else:
-                stack.extend(resolve(struct.unpack_from('<Q', val)[0]) for _, val in reversed(entries))
+                stack.extend((resolve(struct.unpack_from('<Q', val)[0] + base), level - 1) for _, val in reversed(entries))
 
 
 class Volume:
@@ -123,6 +132,7 @@ class Volume:
         self.role = struct.unpack_from('<H', self.sb, 964)[0]
         self.vomap = nx.omap_root(struct.unpack_from('<Q', self.sb, 128)[0])
         self.root_tree = struct.unpack_from('<Q', self.sb, 136)[0]
+        self.fext_tree = struct.unpack_from('<Q', self.sb, 1032)[0]   # apfs_fext_tree_oid: sealed volumes' file extents (physical)
         self.counts = struct.unpack_from('<4Q', self.sb, 184)
         self.loaded = False
 
@@ -139,7 +149,16 @@ class Volume:
         if self.flags & 1 == 0:
             raise SystemExit(f'volume "{self.name}" is encrypted; this reader handles only unencrypted volumes')
         self.children, self.inodes, self.extents, self.xattrs = {}, {}, {}, {}
-        for key, val in self.nx.walk(self.resolve(self.root_tree), self.resolve):
+        root = self.resolve(self.root_tree)
+        base = 0
+        flags, level, entries = self.nx.node(root)
+        if flags & 8 and level and entries:   # hashed tree: find what its stored child ids are relative to
+            first = struct.unpack_from('<Q', entries[0][1])[0]
+            fits = [b for b in (0, self.root_tree) if self.level_at(first + b) == level - 1]
+            if not fits:
+                raise SystemExit('sealed file-system tree: no child id base gives its root a child one level down')
+            base = fits[0]
+        for key, val in self.nx.walk(root, self.resolve, base):
             hdr = struct.unpack_from('<Q', key)[0]
             oid, kind = hdr & 0x0FFFFFFFFFFFFFFF, hdr >> 60
             if kind == J_DREC:
@@ -163,7 +182,19 @@ class Volume:
             elif kind == J_XATTR:
                 n, = struct.unpack_from('<H', key, 8)
                 self.xattrs.setdefault(oid, set()).add(key[10:10 + n].rstrip(b'\0').decode(errors='replace'))
+        if self.fext_tree:
+            for key, val in self.nx.walk(self.fext_tree, lambda block: block):
+                private, logical = struct.unpack_from('<QQ', key)
+                length, phys = struct.unpack_from('<QQ', val)
+                self.extents.setdefault(private, []).append((logical, length & 0x00FFFFFFFFFFFFFF, phys))
         self.loaded = True
+
+    def level_at(self, oid):
+        try:
+            paddr = self.resolve(oid)
+        except SystemExit:
+            return None
+        return struct.unpack_from('<H', self.nx.block(paddr), 34)[0]
 
     @staticmethod
     def dstream_size(xf):
