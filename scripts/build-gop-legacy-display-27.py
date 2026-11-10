@@ -534,6 +534,10 @@ for stem in ('QcomMdt', 'FatVolume', 'QcomQrtr', 'ShengQrtr', 'QcomSmem', 'QcomS
              'ShengGpr', 'ShengAudioReach', 'ShengCs35l43', 'MhiBoot', 'GeniI2c', 'AstonGaugeBus', 'AstonGauge'):
     compile_c(KITS / (stem + '.c'), board_dir / (stem + '.o'))
     board_objects.append(board_dir / (stem + '.o'))
+if not WITH_WIFI:
+    # The stand-ins the kernel link needs for the display and Bluetooth probes' references to the WiFi stack.
+    compile_c(KITS / 'WifiAbsent.c', board_dir / 'WifiAbsent.o')
+    board_objects.append(board_dir / 'WifiAbsent.o')
 # The audio DSP's firmware file reader goes through the VFS: BSD flags.
 compile_c(KITS / 'AdspFirmware.c', board_dir / 'AdspFirmware.o', 'bsd/DEVELOPMENT/kern_exec.o.json')
 board_objects.append(board_dir / 'AdspFirmware.o')
