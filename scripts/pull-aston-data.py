@@ -7,15 +7,17 @@ the store window at the end of unixnu (RamBlock PersistOverlay.h: header block "
 rootstockos/UniXNU-asteroids scripts/pull-asteroids-data.py, for unixnu (sda15) instead of userdata, with every read checked on the
 phone: the pages are hashed there and here.
 
-Nothing on the phone is written except the read script in TWRP's /tmp (RAM). Writes OUT/pages.bin, OUT/runs.json and OUT/store.json;
+Nothing on the phone is written except the read script in TWRP's /tmp (RAM), or with --android in /data/local/tmp of a rooted
+Android (every command then runs through su; unixnu must not be mounted, which Android never does). Writes OUT/pages.bin, OUT/runs.json and OUT/store.json;
 scripts/build-aston-data-image.py (Linux) then lays the seed and the pages into a sparse data.img to mount read only.
 
-usage: pull-aston-data.py --adb ADB --seed data.dbr --out DIR
+usage: pull-aston-data.py --adb ADB --seed data.dbr --out DIR [--android]
 """
 import argparse
 import hashlib
 import json
 import struct
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -27,6 +29,8 @@ RESERVE_BLOCKS = 1024 * 256     # the log reserve at the end of unixnu (1024 MiB
 
 
 def adb(args, *cmd, data=False):
+    if args.android and cmd[0] in ('shell', 'exec-out'):
+        cmd = (cmd[0], 'su -c ' + shlex.quote(' '.join(cmd[1:])))
     out = subprocess.run([args.adb, '-s', SERIAL, *cmd], check=True, capture_output=True, stdin=subprocess.DEVNULL).stdout
     return out if data else out.decode().strip()
 
@@ -56,7 +60,9 @@ def main():
     parser.add_argument('--adb', required=True)
     parser.add_argument('--seed', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
+    parser.add_argument('--android', action='store_true', help='a rooted Android instead of TWRP: reads run through su')
     args = parser.parse_args()
+    remote = '/data/local/tmp/aston-pull.sh' if args.android else '/tmp/aston-pull.sh'
 
     logical = seed_logical(args.seed)
     pages = logical // BLOCK
@@ -64,8 +70,13 @@ def main():
     window = 1 + bitmap_blocks + pages
     start = PART_BYTES // BLOCK - RESERVE_BLOCKS - window
 
-    require(adb(args, 'get-state') == 'recovery', 'the phone is not in recovery')
-    require(adb(args, 'shell', 'getprop ro.twrp.version') != '', 'not TWRP')
+    if args.android:
+        require(adb(args, 'get-state') == 'device', 'the phone is not in Android')
+        require(adb(args, 'shell', 'id -u') == '0', 'su does not give root')
+        require(adb(args, 'shell', 'grep -c "^/dev/block/sda15 " /proc/mounts || true') in ('0', ''), 'sda15 is mounted')
+    else:
+        require(adb(args, 'get-state') == 'recovery', 'the phone is not in recovery')
+        require(adb(args, 'shell', 'getprop ro.twrp.version') != '', 'not TWRP')
     require(adb(args, 'shell', 'readlink -f /dev/block/by-name/unixnu') == PART, 'by-name/unixnu is not sda15')
     require('PARTNAME=unixnu' in adb(args, 'shell', 'cat /sys/class/block/sda15/uevent'), 'sda15 is not named unixnu')
     require(int(adb(args, 'shell', f'blockdev --getsize64 {PART}')) == PART_BYTES, 'unixnu size differs from the plan')
@@ -91,19 +102,19 @@ def main():
     base = start + 1 + bitmap_blocks
     script = args.out / 'pull.sh'
     script.write_text(''.join(f'dd if={PART} bs={BLOCK} skip={base + i} count={n} 2>/dev/null\n' for i, n in runs), newline='\n')
-    adb(args, 'push', str(script), '/tmp/aston-pull.sh')
-    there = adb(args, 'shell', 'sh /tmp/aston-pull.sh | sha256sum').split()[0]
+    adb(args, 'push', str(script), remote)
+    there = adb(args, 'shell', f'sh {remote} | sha256sum').split()[0]
     digest = hashlib.sha256()
     total = 0
     with open(args.out / 'pages.bin', 'wb') as out:
-        proc = subprocess.Popen([args.adb, '-s', SERIAL, 'exec-out', 'sh /tmp/aston-pull.sh'], stdout=subprocess.PIPE,
-                                stdin=subprocess.DEVNULL)
+        command = f'su -c {shlex.quote("sh " + remote)}' if args.android else f'sh {remote}'
+        proc = subprocess.Popen([args.adb, '-s', SERIAL, 'exec-out', command], stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
         for chunk in iter(lambda: proc.stdout.read(1 << 20), b''):
             digest.update(chunk)
             out.write(chunk)
             total += len(chunk)
         require(proc.wait() == 0, 'adb exec-out failed')
-    adb(args, 'shell', 'rm -f /tmp/aston-pull.sh')
+    adb(args, 'shell', f'rm -f {remote}')
     require(total == len(present) * BLOCK, f'pulled {total} bytes, expected {len(present) * BLOCK}')
     require(digest.hexdigest() == there, 'the pages differ from what the phone read')
     (args.out / 'runs.json').write_text(json.dumps(runs) + '\n')
