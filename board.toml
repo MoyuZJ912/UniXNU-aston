@@ -146,6 +146,9 @@ trust_components = ["StaticTrustCache", "Cryptex1,SystemTrustCache", "Cryptex1,A
 wallpapers = []
 # The Metal plugin (Turnip and metal2vulkan) in the GPU addon, without wallpapers.
 gpu_addon = true
+# Owner overlays of sealed system files, made from the OS image into the GPU addon (unixnu-patches/0003): configd's InterfaceNamer
+# with short wait timeouts, which the kernel mounts over its bundle (patches/xnu-12377/aston-interface-namer-overlay.patch).
+overlay_tool = "scripts/aston-runtime-overlays.py"
 
 [payload.runtime.launchd_job_environment."com.apple.iconservices.iconservicesagent"]
 FORCE_SOFTWARE_RENDERER = "0"

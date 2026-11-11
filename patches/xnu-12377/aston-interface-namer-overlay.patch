@@ -1,0 +1,31 @@
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index cb6c40e..e3ca333 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -8655,6 +8655,9 @@ done:
+ 		kfree_data(path, 256);
+ 	}
+ }
++/* aston: the InterfaceNamer overlay mount's stage and status (BootLog's A row). */
++volatile int aston_ifnamer_stage = 0;
++volatile int aston_ifnamer_status = -1;
+ static void
+ native_gpu_addon_prepare(proc_t p, user_addr_t scratch)
+ {
+@@ -8697,6 +8700,15 @@ native_gpu_addon_prepare(proc_t p, user_addr_t scratch)
+ 	native_gpu_addon_mount(p, scratch, 0xa00, audio_source, sizeof(audio_source), audio_point, sizeof(audio_point),
+ 	    "/System/Library/Audio/Plug-Ins/HAL/BuiltinAudioPlugin.driver", "/System/Library/Audio/Plug-Ins/HAL/ShengAudio.driver/Info.plist",
+ 	    &native_gpu_addon4_stage, &native_gpu_addon4_status);
++	/* aston: configd's InterfaceNamer plugin with short wait timeouts (UniXNU-aston scripts/aston-runtime-overlays.py). This kernel
++	 * has no IONetworkStack, so the plugin published Plugin:InterfaceNamer only at its 300 s timeout, and Settings, which waits for
++	 * that key at launch, hung until then. The sealed _CodeSignature stays visible below the owner's Info.plist. */
++	static const char ifnamer_source[] = "/private/var/ngpu/ifnamer",
++	    ifnamer_point[] = "/System/Library/SystemConfiguration/InterfaceNamer.bundle";
++	native_gpu_addon_mount(p, scratch, 0x600, ifnamer_source, sizeof(ifnamer_source), ifnamer_point, sizeof(ifnamer_point),
++	    "/System/Library/SystemConfiguration/InterfaceNamer.bundle/_CodeSignature",
++	    "/System/Library/SystemConfiguration/InterfaceNamer.bundle/Info.plist", &aston_ifnamer_stage, &aston_ifnamer_status);
++	printf("aston: InterfaceNamer overlay mount stage %d status %d\n", aston_ifnamer_stage, aston_ifnamer_status);
+ 	/* iPadOS 27 imports jobs from this precompiled dictionary. The owner
+ 	 * overlay adds its Wi-Fi job while retaining every original entry. */
+ 	static const char wifi_xpc_source[] = "/private/var/ngpu/xpc";
+

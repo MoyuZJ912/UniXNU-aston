@@ -87,6 +87,9 @@ extern volatile int native_gpu_addon3_stage __attribute__((weak_import));
 extern volatile int native_gpu_addon4_stage __attribute__((weak_import));
 extern volatile int native_gpu_addon4_status __attribute__((weak_import));
 extern volatile int native_gpu_addon5_stage __attribute__((weak_import));
+// aston: the InterfaceNamer overlay mount (patches/xnu-12377/aston-interface-namer-overlay.patch).
+extern volatile int aston_ifnamer_stage __attribute__((weak_import));
+extern volatile int aston_ifnamer_status __attribute__((weak_import));
 extern volatile int native_staged_union_stage __attribute__((weak_import));
 extern volatile int native_staged_union_status __attribute__((weak_import));
 extern volatile int native_gpu_addon5_status __attribute__((weak_import));
@@ -490,13 +493,14 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
   // server plug-in.
   if (&native_gpu_addon_files && &native_gpu_addon_stage) {
     char row[180];
-    snprintf(row, sizeof row, "A files=%d wr=%d same=%d fail=%d err=%d mount=%d/%d mount2=%d/%d mount3=%d/%d mount4=%d/%d mount5=%d/%d",
+    snprintf(row, sizeof row, "A files=%d wr=%d same=%d fail=%d err=%d mount=%d/%d mount2=%d/%d mount3=%d/%d mount4=%d/%d mount5=%d/%d ifnamer=%d/%d",
              native_gpu_addon_files,
              native_gpu_addon_written, native_gpu_addon_same, native_gpu_addon_failed, native_gpu_addon_error, native_gpu_addon_stage,
              native_gpu_addon_status, native_gpu_addon2_stage, native_gpu_addon2_status, &native_gpu_addon3_stage ? native_gpu_addon3_stage : 0,
              &native_gpu_addon3_status ? native_gpu_addon3_status : 0, &native_gpu_addon4_stage ? native_gpu_addon4_stage : 0,
              &native_gpu_addon4_status ? native_gpu_addon4_status : 0, &native_gpu_addon5_stage ? native_gpu_addon5_stage : 0,
-             &native_gpu_addon5_status ? native_gpu_addon5_status : 0);
+             &native_gpu_addon5_status ? native_gpu_addon5_status : 0, &aston_ifnamer_stage ? aston_ifnamer_stage : 0,
+             &aston_ifnamer_status ? aston_ifnamer_status : 0);
     at = put(out, at, cap, row, sizeof row);
     // the staged system apps' union view over /Applications (owner-staged-apps=1): stage 5 = mounted, both entries visible
     snprintf(row, sizeof row, "[staged apps union] stage %d status %d", &native_staged_union_stage ? native_staged_union_stage : 0,

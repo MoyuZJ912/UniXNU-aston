@@ -225,14 +225,14 @@ jobs:
           ./unixnu build kernel payload -D ../UniXNU-aston "${args[@]}"
       - name: Ace 3 menu
         # The payload volume replaces the firmware's menu on this phone: keep "Switch to slot B" as the default.
-        # Variants of the same kernel and Data: the log-sys/log-power BootLog rows; a one-time rerun of the first-boot data migration
-        # (aston-migration-rerun.patch; no staged apps copy, which the migration refuses as system app upgrades); and the smallest board
-        # set as a fallback: the CPU display path (no GPU, no Metal addon), no DSP, no fuel gauge.
+        # Variants of the same kernel and Data: the BootLog rows of the sys, power, audio ([adsp]) and wifi (qrtr, which the DSP's
+        # battery manager uses) groups, and a one-time rerun of the first-boot data migration (aston-migration-rerun.patch; no staged
+        # apps copy, which the migration refuses as system app upgrades). The GPU path booted iOS on the phone (2026-11-11), so the CPU
+        # display fallback entry is gone. The longest line (Rebuild app data) is 926 bytes of DarwinBoot's 1024.
         run: |
           python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img" \
-            --variant "xnu-diag|iOS diag (logs)|log-sys=1 log-power=1" \
-            --variant "xnu-migrate|Rebuild app data (slow, once)|sheng-rerun-migration=1 log-sys=1 log-power=1" \
-            --variant "xnu-safe|iOS safe (CPU display)|!sheng-gpu-power !sheng-gpu-metal !sheng-fb-gpu !fb-gpu !fb-bgra !sheng-gpu-dcvs !gpu-addon !sheng-battery !sheng-adsp log-sys=1 log-power=1"
+            --variant "xnu-diag|iOS diag (logs)|log-sys=1 log-power=1 log-audio=1 log-wifi=1" \
+            --variant "xnu-migrate|Rebuild app data (slow, once)|sheng-rerun-migration=1 log-sys=1 log-power=1 log-audio=1 log-wifi=1"
       - uses: actions/cache/save@v4
         if: always() && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/aston/ios-27.0.1-24A446/aston_ios27/runtime/data.dbr') != ''
         with:

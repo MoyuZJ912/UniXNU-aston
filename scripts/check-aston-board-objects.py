@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 CPP = ['TouchProbe', 'ButtonProbe', 'BatteryProbe', 'ShengBattery']
-C = ['S3910', 'AstonGaugeBus', 'AstonGauge', 'BootLog']
+C = ['S3910', 'AstonGaugeBus', 'AstonGauge', 'BootLog', 'AstonHaltRestart']
 
 
 def recipe(tree, name):

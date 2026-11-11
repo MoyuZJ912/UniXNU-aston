@@ -529,9 +529,11 @@ for stem, extra in ([('WifiNet', ('-I', str(WIFI / 'include')))] if WITH_WIFI el
     run([llvm / 'llvm-objcopy', '--remove-section=__DATA,__mod_init_func', f'--globalize-symbol=__GLOBAL__sub_I_{stem}.cpp',
          board_dir / (stem + '.o'), board_dir / (stem + '.late.o')])
     board_objects.append(board_dir / (stem + '.late.o'))
-# aston: AstonGaugeBus and AstonGauge are the fuel gauge path of ShengBattery.cpp (sheng-battery=2).
+# aston: AstonGaugeBus and AstonGauge are the fuel gauge path of ShengBattery.cpp (sheng-battery=2); AstonHaltRestart is restart
+# and power off through PSCI.
 for stem in ('QcomMdt', 'FatVolume', 'QcomQrtr', 'ShengQrtr', 'QcomSmem', 'QcomSmp2p', 'QcomGlink', 'QcomQmp', 'QcomRpmh', 'ShengBattmgr',
-             'ShengGpr', 'ShengAudioReach', 'ShengCs35l43', 'MhiBoot', 'GeniI2c', 'AstonGaugeBus', 'AstonGauge'):
+             'ShengGpr', 'ShengAudioReach', 'ShengCs35l43', 'MhiBoot', 'GeniI2c', 'AstonGaugeBus', 'AstonGauge',
+             'AstonHaltRestart'):
     compile_c(KITS / (stem + '.c'), board_dir / (stem + '.o'))
     board_objects.append(board_dir / (stem + '.o'))
 if not WITH_WIFI:

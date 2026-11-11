@@ -127,26 +127,63 @@ int main(void) {
         assert 'assert(sched_edge_config_verify());' in init
         policy = init[init.index('sched_clutch_edge edge_config_defaults'):init.index('\n\tspl_t s')]
         verify = function(scheduler, 'static inline bool\nsched_edge_config_verify_non_decreasing_qos_strictness(')
+        transitive = function(scheduler, 'static bool\nsched_edge_config_verify_transitive_traverse(')
+        # The aston psets: 0 the A510 cluster (E), 1 the A715/A710 cluster and 2 the X3 core (both P).
         run_host(args.cc, work, 'edge', r'''
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 typedef unsigned pset_id_t;
 typedef unsigned sched_bucket_t;
+typedef uint64_t bitmap_t;
 typedef struct {unsigned sce_migration_weight, sce_migration_allowed, sce_steal_allowed;} sched_clutch_edge;
 enum {PSET_AMP_E, PSET_AMP_P, MAX_PSET_TYPES, TH_BUCKET_SCHED_MAX=6, PERMISSIVE_MIGRATION_BUCKET=0};
-static sched_clutch_edge matrix[2][2][6];
+enum {kPsets=3};
+static const unsigned pset_type[kPsets]={PSET_AMP_E,PSET_AMP_P,PSET_AMP_P};
+static const unsigned sched_num_psets=kPsets;
+static sched_clutch_edge matrix[kPsets][kPsets][6];
 static sched_clutch_edge sched_edge_config_get(unsigned s,unsigned d,unsigned q) {return matrix[s][d][q];}
+static bool bitmap_test(const bitmap_t *map,unsigned i) {return (map[0]>>i)&1;}
+static void bitmap_set(bitmap_t *map,unsigned i) {map[0]|=1ull<<i;}
 #define kprintf(...) ((void)0)
-''' + verify + '\nint main(void) {\n' + policy + r'''
-    for(unsigned s=0;s<2;s++) for(unsigned d=0;d<2;d++) for(unsigned q=0;q<6;q++) matrix[s][d][q]=edge_config_defaults[s][d];
-    for(unsigned s=0;s<2;s++) for(unsigned d=0;d<2;d++) for(unsigned q=0;q<6;q++) assert(sched_edge_config_verify_non_decreasing_qos_strictness(s,d,q));
-    assert(matrix[PSET_AMP_P][PSET_AMP_E][0].sce_migration_allowed);
-    assert(!matrix[PSET_AMP_E][PSET_AMP_P][5].sce_steal_allowed);
+''' + verify + '\n' + transitive + r'''
+static void fill(sched_clutch_edge defaults[MAX_PSET_TYPES][MAX_PSET_TYPES]) {
+    for(unsigned s=0;s<kPsets;s++) for(unsigned d=0;d<kPsets;d++) for(unsigned q=0;q<6;q++)
+        matrix[s][d][q]=defaults[pset_type[s]][pset_type[d]];
+}
+// sched_edge_config_verify() over the board's psets: what the DEVELOPMENT kernel asserts once the CPUs are up.
+static bool verify_all(void) {
+    bool pass=true;
+    for(unsigned s=0;s<kPsets;s++) for(unsigned d=0;d<kPsets;d++) if(s!=d) for(unsigned q=0;q<6;q++)
+        pass=sched_edge_config_verify_non_decreasing_qos_strictness(s,d,q)&&pass;
+    for(unsigned d=0;d<kPsets;d++) for(unsigned q=0;q<6;q++) {
+        bitmap_t visited[1]={0};
+        pass=sched_edge_config_verify_transitive_traverse(d,d,q,visited)&&pass;
+    }
+    return pass;
+}
+int main(void) {
+''' + policy + r'''
+    fill(edge_config_defaults);
+    assert(verify_all());
+    for(unsigned q=0;q<6;q++) {
+        assert(matrix[1][0][q].sce_migration_allowed && matrix[2][0][q].sce_migration_allowed);   // P -> E spills
+        assert(matrix[0][1][q].sce_migration_allowed && matrix[0][1][q].sce_steal_allowed);       // E -> P spills (aston)
+        assert(matrix[0][2][q].sce_migration_allowed && matrix[1][2][q].sce_migration_allowed);
+    }
     // The previous policy prohibited the three high QoS buckets only. It must fail XNU's actual validator.
-    for(unsigned q=0;q<3;q++) matrix[PSET_AMP_P][PSET_AMP_E][q]=no_spill;
-    assert(!sched_edge_config_verify_non_decreasing_qos_strictness(PSET_AMP_P,PSET_AMP_E,3));
-    puts("PASS: XNU QoS monotonicity validator accepts the new matrix and rejects the previous policy");
+    for(unsigned q=0;q<3;q++) matrix[1][0][q]=no_spill;
+    assert(!sched_edge_config_verify_non_decreasing_qos_strictness(1,0,3));
+    // A steal-only E -> P edge also passes: migration-free edges add no paths for the transitive check.
+    fill(edge_config_defaults);
+    for(unsigned d=1;d<kPsets;d++) for(unsigned q=0;q<6;q++) matrix[0][d][q]=(sched_clutch_edge){0,0,1};
+    assert(verify_all());
+    // An E -> P spill to the X3 alone breaks transitivity (E reaches X3 through the A715 cluster's edge only).
+    fill(edge_config_defaults);
+    for(unsigned q=0;q<6;q++) matrix[0][1][q]=no_spill;
+    assert(!verify_all());
+    puts("PASS: XNU's QoS monotonicity and transitivity validators accept the E <-> P spill matrix on E, P, P psets");
 }
 ''')
         processor = (args.xnu / 'osfmk/kern/processor.c').read_text()

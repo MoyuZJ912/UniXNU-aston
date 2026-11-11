@@ -1,0 +1,30 @@
+From: aston
+Subject: [PATCH] runtime: device overlay tool for owner overlays of sealed system files
+
+[payload.runtime] overlay_tool runs a device script on the mounted OS image and adds the directories its report names
+to the GPU addon (UniXNU-aston: the InterfaceNamer plugin Info.plist with short wait timeouts).
+---
+diff --git a/scripts/build-boot-runtime.py b/scripts/build-boot-runtime.py
+--- a/scripts/build-boot-runtime.py	2026-11-11 19:45:08.792307500 +0800
++++ b/scripts/build-boot-runtime.py	2026-11-11 19:45:08.792348563 +0800
+@@ -274,6 +274,20 @@
+                             bundles += [f'audio/{name}', Path(mount) / 'System/Library/Audio/Plug-Ins/HAL' / name]
+                         script('addon-add-dir.py', candidate, combined, *bundles)
+                         candidate = combined
++                    if request.get('overlay_tool'):
++                        # Owner overlays of sealed system files, made by the device from this OS image: its report names each
++                        # addon prefix and the directory below its output that goes there (the kernel mounts them).
++                        overlay = work / 'overlay'
++                        run(sys.executable, Path(request['device']) / request['overlay_tool'], overlay, '--os-root', mount)
++                        directories = []
++                        for prefix, relative in json.loads((overlay / 'report.json').read_text())['directories'].items():
++                            if (not prefix or Path(prefix).is_absolute() or '..' in Path(prefix).parts or
++                                    Path(relative).is_absolute() or '..' in Path(relative).parts):
++                                raise ValueError('invalid overlay directory')
++                            directories += [prefix, overlay / relative]
++                        combined = work / 'overlay-addon.bin'
++                        script('addon-add-dir.py', candidate, combined, *directories)
++                        candidate = combined
+                     addon = out / 'gpuaddon.bin'
+                     candidate.replace(addon)
+         if addon is None and not want_addon and request.get('boot_shims'):
