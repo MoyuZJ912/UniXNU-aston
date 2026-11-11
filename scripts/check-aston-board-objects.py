@@ -13,7 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-CPP = ['TouchProbe', 'ButtonProbe', 'BatteryProbe', 'ShengBattery']
+CPP = ['TouchProbe', 'ButtonProbe', 'BatteryProbe', 'ShengBattery', 'AstonDisplayWindow']
 C = ['S3910', 'AstonGaugeBus', 'AstonGauge', 'BootLog', 'AstonHaltRestart']
 
 

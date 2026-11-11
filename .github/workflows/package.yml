@@ -228,10 +228,13 @@ jobs:
         # Variants of the same kernel and Data: the BootLog rows of the sys, power, audio ([adsp]) and wifi (qrtr, which the DSP's
         # battery manager uses) groups, and a one-time rerun of the first-boot data migration (aston-migration-rerun.patch; no staged
         # apps copy, which the migration refuses as system app upgrades). The GPU path booted iOS on the phone (2026-11-11), so the CPU
-        # display fallback entry is gone. The longest line (Rebuild app data) is 926 bytes of DarwinBoot's 1024.
+        # display fallback entry is gone. "iOS 402x874" shows iOS a 1206 x 2622 window of the panel (aston-display=1,
+        # aston-display-window.patch), a screen class iOS knows, for comparison. The longest line (Rebuild app data) is 926 bytes of
+        # DarwinBoot's 1024.
         run: |
           python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img" \
             --variant "xnu-diag|iOS diag (logs)|log-sys=1 log-power=1 log-audio=1 log-wifi=1" \
+            --variant "xnu-window|iOS 402x874 (test, logs)|aston-display=1 log-sys=1 log-power=1 log-audio=1 log-wifi=1" \
             --variant "xnu-migrate|Rebuild app data (slow, once)|sheng-rerun-migration=1 log-sys=1 log-power=1 log-audio=1 log-wifi=1"
       - uses: actions/cache/save@v4
         if: always() && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/aston/ios-27.0.1-24A446/aston_ios27/runtime/data.dbr') != ''

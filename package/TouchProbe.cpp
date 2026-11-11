@@ -65,6 +65,9 @@ volatile uint32_t native_touch_irq_stats[4];
 volatile uint32_t native_touch_s3910[8];
 }
 
+// x, y, width, height, panel width, panel height of the display window (all zero: the whole panel), set by the kernel at boot.
+extern "C" uint32_t aston_display_window[6];
+
 namespace {
 struct Region {OSSharedPtr<IOMemoryMap> keep; uintptr_t va = 0;};
 
@@ -306,6 +309,10 @@ void publish(const struct s3910_frame &frame) {
         if (gFlip & 4) {const int t = x; x = y; y = t;}
         if (gFlip & 1) x = 32767 - x;
         if (gFlip & 2) y = 32767 - y;
+        if (aston_display_window[2]) {   // aston-display=1: iOS sees a window of the panel
+            x = tb_window_axis(x, aston_display_window[4], aston_display_window[0], aston_display_window[2]);
+            y = tb_window_axis(y, aston_display_window[5], aston_display_window[1], aston_display_window[3]);
+        }
         ids[count] = static_cast<int>(id) + 1;
         xs[count] = static_cast<int>((int64_t)x * (TB_HID_X_MAX - 1) / 32767);
         ys[count] = static_cast<int>((int64_t)y * (TB_HID_Y_MAX - 1) / 32767);

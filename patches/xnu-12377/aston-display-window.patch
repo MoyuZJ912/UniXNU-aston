@@ -1,0 +1,79 @@
+diff --git a/pexpert/arm/pe_init.c b/pexpert/arm/pe_init.c
+index 70c5956..e0d1fb1 100644
+--- a/pexpert/arm/pe_init.c
++++ b/pexpert/arm/pe_init.c
+@@ -441,6 +441,65 @@ PE_slide_devicetree(vm_offset_t slide)
+ 	SecureDTInit(PE_state.deviceTreeHead, PE_state.deviceTreeSize);
+ }
+ 
++/*
++ * aston: aston-display=1 shows iOS a 1206 x 2622 window of the 1264 x 2780 panel: the iPhone 16 Pro's 402 x 874 points at scale 3,
++ * also the iPhone 16 Pro Max's zoomed size, so that the screen class is one iOS knows (the whole panel is 421 x 927 points, and
++ * ProgressUI found no screen class for it). The window keeps the panel's row stride and starts on a 16 KiB boundary, as close to
++ * the centre as that allows: every framebuffer consumer maps from v_baseAddr. boot_args->Video keeps the whole panel (the early
++ * VM layout reserves its size). aston_display_window: x, y, width, height, panel width, panel height, all zero when the whole
++ * panel is the display; the board's touch path and border fill read it.
++ */
++uint32_t aston_display_window[6];
++
++static int
++aston_display_window_origin(uint32_t panel_w, uint32_t panel_h, uint32_t stride, uint32_t w, uint32_t h, uint32_t *x, uint32_t *y)
++{
++	if (!w || !h || w > panel_w || h > panel_h || stride < panel_w * 4) {
++		return 0;
++	}
++	const uint32_t cx = (panel_w - w) / 2, cy = (panel_h - h) / 2;
++	uint32_t best = 0xffffffffu;
++	for (uint32_t ty = 0; ty <= panel_h - h; ty++) {
++		for (uint32_t tx = 0; tx <= panel_w - w; tx++) {
++			if (((uint64_t)ty * stride + (uint64_t)tx * 4) % 0x4000) {
++				continue;
++			}
++			const uint32_t d = (tx > cx ? tx - cx : cx - tx) + (ty > cy ? ty - cy : cy - ty);
++			if (d < best) {
++				best = d;
++				*x = tx;
++				*y = ty;
++			}
++		}
++	}
++	return best != 0xffffffffu;
++}
++
++static void
++aston_display_window_apply(void)
++{
++	uint32_t mode = 0, x = 0, y = 0;
++	const uint32_t w = 1206, h = 2622;
++	PE_Video *v = &PE_state.video;
++	if (!PE_parse_boot_argn("aston-display", &mode, sizeof(mode)) || mode != 1) {
++		return;
++	}
++	if (!v->v_baseAddr || v->v_depth != 32 || v->v_rotate || v->v_width > 16384 || v->v_height > 16384 ||
++	    v->v_rowBytes > 65536 || !aston_display_window_origin((uint32_t)v->v_width, (uint32_t)v->v_height,
++	    (uint32_t)v->v_rowBytes, w, h, &x, &y)) {
++		return;
++	}
++	aston_display_window[0] = x;
++	aston_display_window[1] = y;
++	aston_display_window[2] = w;
++	aston_display_window[3] = h;
++	aston_display_window[4] = (uint32_t)v->v_width;
++	aston_display_window[5] = (uint32_t)v->v_height;
++	v->v_baseAddr += (unsigned long)y * v->v_rowBytes + (unsigned long)x * 4;
++	v->v_width = w;
++	v->v_height = h;
++}
++
+ void
+ PE_init_platform(boolean_t vm_initialized, void *args)
+ {
+@@ -467,6 +526,7 @@ PE_init_platform(boolean_t vm_initialized, void *args)
+ 		PE_state.video.v_scale = ((boot_args_ptr->Video.v_depth >> kBootVideoDepthScaleShift) & kBootVideoDepthMask) + 1;
+ 		PE_state.video.v_display = boot_args_ptr->Video.v_display;
+ 		strlcpy(PE_state.video.v_pixelFormat, "BBBBBBBBGGGGGGGGRRRRRRRR", sizeof(PE_state.video.v_pixelFormat));
++		aston_display_window_apply();
+ 	}
+ 	if (!vm_initialized) {
+ 		/*
+

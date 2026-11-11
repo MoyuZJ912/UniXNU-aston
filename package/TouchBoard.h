@@ -87,6 +87,16 @@
 // ShengHidInput normalises published coordinates against these maxima (30480 x 20320, the reference panel's axes).
 #define TB_HID_X_MAX 30480
 #define TB_HID_Y_MAX 20320
+// aston-display=1 (patches/xnu-12377/aston-display-window.patch): iOS sees a window of the panel. One axis of a contact, normalised to
+// 0..32767 over the panel's `panel` pixels, is normalised again over the window's `size` pixels from `origin`. Contacts on the border
+// clamp to the window's edge, so an edge swipe that starts on the border starts at the edge. A window outside the panel maps nothing.
+static inline int tb_window_axis(int v, uint32_t panel, uint32_t origin, uint32_t size) {
+    if (panel < 2 || size < 2 || origin > panel || size > panel - origin) return v;
+    int64_t px = ((int64_t)v * (panel - 1) + 16383) / 32767 - origin;   // nearest panel pixel
+    if (px < 0) px = 0;
+    if (px > (int64_t)size - 1) px = (int64_t)size - 1;
+    return (int)((px * 32767 + (size - 1) / 2) / (size - 1));
+}
 // TLMM pin configuration with a pull: bits 1:0 pull (0 none, 1 down, 3 up), 5:2 function, 8:6 drive, 9 output enable.
 static inline uint32_t tb_gpio_cfg(unsigned pull, unsigned drive_code, unsigned output) {
     return (pull&3u)|(drive_code&7u)<<6|(output?1u<<9:0u);

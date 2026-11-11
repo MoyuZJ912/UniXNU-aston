@@ -90,6 +90,9 @@ extern volatile int native_gpu_addon5_stage __attribute__((weak_import));
 // aston: the InterfaceNamer overlay mount (patches/xnu-12377/aston-interface-namer-overlay.patch).
 extern volatile int aston_ifnamer_stage __attribute__((weak_import));
 extern volatile int aston_ifnamer_status __attribute__((weak_import));
+// aston: the display window (patches/xnu-12377/aston-display-window.patch, package/AstonDisplayWindow.cpp).
+extern uint32_t aston_display_window[6] __attribute__((weak_import));
+extern volatile int32_t aston_display_window_state __attribute__((weak_import));
 extern volatile int native_staged_union_stage __attribute__((weak_import));
 extern volatile int native_staged_union_status __attribute__((weak_import));
 extern volatile int native_gpu_addon5_status __attribute__((weak_import));
@@ -486,6 +489,15 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
     char row[80];
     snprintf(row, sizeof row, "[boot screen] state=%d screens=%d seconds=%d", aston_boot_screen_stats[0], aston_boot_screen_stats[1],
              aston_boot_screen_stats[2]);
+    at = put(out, at, cap, row, sizeof row);
+  }
+  // The display window (aston-display=1): origin, size and panel size in pixels (all zero: iOS sees the whole panel); border state
+  // (1 painted, <0 refused).
+  if (&aston_display_window && aston_display_window[2]) {
+    char row[96];
+    snprintf(row, sizeof row, "[display window] x=%u y=%u w=%u h=%u panel=%ux%u borders=%d", aston_display_window[0],
+             aston_display_window[1], aston_display_window[2], aston_display_window[3], aston_display_window[4], aston_display_window[5],
+             &aston_display_window_state ? (int)aston_display_window_state : 0);
     at = put(out, at, cap, row, sizeof row);
   }
   // The payload's GPU addon (kern_exec.c native_gpu_addon_install): files in it (-1 none), written, already equal, failed, last error; then
