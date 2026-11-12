@@ -17,7 +17,11 @@ subprocess.run(['bash', str(module / 'tools/fetch-sources.sh')], check=True, std
 subprocess.run(['bash', str(module / 'tools/prepare.sh')], check=True, stdout=subprocess.DEVNULL)
 clang = subprocess.run(['xcrun', '-f', 'clang'], check=True, capture_output=True, text=True).stdout.strip()
 resource = subprocess.run([clang, '-print-resource-dir'], check=True, capture_output=True, text=True).stdout.strip() + '/include'
-flags = ['-target', TRIPLE, '-mkernel', '-O2', '-g0', '-ffreestanding', '-fno-builtin', '-fno-common', '-fno-strict-aliasing', '-fwrapv',
+# aston: optimized for size (-Os) except the packet path, which keeps -O2: at -O2 the stack's 1019 KiB of code left the native kernel
+# 32 KiB more than the iPhone17,2 collection has room for (CI 43259190780); -Os elsewhere saves about 125 KiB.
+HOT = {'ath12k_ce', 'ath12k_dp', 'ath12k_dp_rx', 'ath12k_dp_tx', 'ath12k_hal', 'w7_ce', 'w7_dp', 'w7_dp_rx', 'w7_dp_tx', 'w7_hal',
+       'w7_hal_rx', 'w7_hal_tx', 'w7_hal_wcn7850', 'mac80211_rx', 'mac80211_tx', 'mac80211_agg-rx', 'mac80211_wme', 'nw_net', 'nw_netdev'}
+flags = ['-target', TRIPLE, '-mkernel', '-Os', '-g0', '-ffreestanding', '-fno-builtin', '-fno-common', '-fno-strict-aliasing', '-fwrapv',
          '-fno-stack-protector', '-Wno-incompatible-pointer-types', '-Wno-error', '-fno-delete-null-pointer-checks', '-mgeneral-regs-only', '-momit-leaf-frame-pointer', '-std=gnu11', '-w',
          '-DCONFIG_ATH12K_DEBUG', '-DCONFIG_CFG80211=1', '-DCONFIG_MAC80211=1',
          '-DCONFIG_MAC80211_STA_HASH_MAX_SIZE=0', '-DCONFIG_MAC80211_RC_DEFAULT=""',
@@ -62,7 +66,8 @@ def build(job):
     raw_obj = raw / obj.name
     dependencies = raw_obj.with_suffix('.d')
     identity = raw_obj.with_suffix('.inputs.json')
-    command = [clang, '-c', *extra, *flags, '-MD', '-MF', str(dependencies), str(src), '-o', str(raw_obj)]
+    level = ['-O2'] if obj.stem in HOT else []
+    command = [clang, '-c', *extra, *flags, *level, '-MD', '-MF', str(dependencies), str(src), '-o', str(raw_obj)]
     if raw_obj.exists() and identity.exists():
         record = json.loads(identity.read_text())
         if record.get('schema') == 1 and record.get('command') == command and record.get('object_sha256') == hashlib.sha256(raw_obj.read_bytes()).hexdigest() and all(
