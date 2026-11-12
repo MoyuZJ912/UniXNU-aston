@@ -1,5 +1,5 @@
 diff --git a/ArmCpu.cpp b/ArmCpu.cpp
-index 98b6c3c..44b3cce 100644
+index 98b6c3c..aef97ae 100644
 --- a/ArmCpu.cpp
 +++ b/ArmCpu.cpp
 @@ -51,6 +51,26 @@ volatile int32_t armcpu_smp_psci_rc[8];
@@ -19,9 +19,9 @@ index 98b6c3c..44b3cce 100644
 +// [0] mode in effect, [1] PSCI_VERSION, [2] PSCI_FEATURES(CPU_SUSPEND) (-1 not asked), [3] why deep idle stopped (1 late wake-ups,
 +// 2 CPU state refused, 3 no PSCI conduit)
 +volatile int32_t armcpu_idle_info[4];
-+// Per logical core: [0] requests, [1] returns through the reset vector, [2] returns from the call, [3] refused requests, [4] last
-+// result, [5] latest wake after the kernel's deadline (us), [6] cluster requests, [7] milliseconds spent powered down
-+volatile int32_t armcpu_idle_stats[ARMCPU_SMP_SLOTS][8];
++// Per logical core (unsigned: the kernel's overflow checks have no handler here): [0] requests, [1] returns through the reset vector,
++// [2] returns from the call, [3] refused requests, [4] last result (as unsigned), [5] latest wake after the kernel's deadline (us), [6] cluster requests, [7] milliseconds spent powered down
++volatile uint32_t armcpu_idle_stats[ARMCPU_SMP_SLOTS][8];
 +}
 +
 +static void idleProbe (void);
@@ -131,7 +131,7 @@ index 98b6c3c..44b3cce 100644
 +  const uint32_t id = self->logicalId;
 +  if (id >= ARMCPU_SMP_SLOTS) { return; }
 +  IdleSave &save = gIdleSave[id];
-+  volatile int32_t *s = armcpu_idle_stats[id];
++  volatile uint32_t *s = armcpu_idle_stats[id];
 +  if (!enter) {
 +    if (__atomic_load_n (&save.down, __ATOMIC_ACQUIRE) == 0) { return; }
 +    // Back through the reset vector.
@@ -140,10 +140,10 @@ index 98b6c3c..44b3cce 100644
 +    __asm__ volatile ("msr cntv_ctl_el0, %0; isb" :: "r" (save.ctl & 1) : "memory");
 +    const uint64_t now = counter ();
 +    s[1] = s[1] + 1;
-+    s[7] = s[7] + static_cast<int32_t> ((now - save.entered) * 1000 / gIdleFreq);
++    s[7] = s[7] + static_cast<uint32_t> ((now - save.entered) * 1000 / gIdleFreq);
 +    if (now > save.cval) {
 +      const uint64_t late = now - save.cval;
-+      s[5] = static_cast<int32_t> (late * 1000000 / gIdleFreq);
++      s[5] = static_cast<uint32_t> (late * 1000000 / gIdleFreq);
 +      if (late > gIdleLateTicks && __atomic_add_fetch (&gIdleLate, 1U, __ATOMIC_RELAXED) >= 3) { idleStop (1); }
 +    }
 +    __atomic_store_n (&save.down, 0U, __ATOMIC_RELEASE);
@@ -169,7 +169,7 @@ index 98b6c3c..44b3cce 100644
 +  // Only a core that kept its state gets here: a pending interrupt, a shallower state chosen by the firmware, or a refusal.
 +  __asm__ volatile ("msr cntv_cval_el0, %0; isb" :: "r" (cval) : "memory");
 +  __atomic_store_n (&save.down, 0U, __ATOMIC_RELEASE);
-+  s[4] = static_cast<int32_t> (result);
++  s[4] = static_cast<uint32_t> (result);
 +  if (result == 0) {
 +    s[2] = s[2] + 1;
 +  } else {
