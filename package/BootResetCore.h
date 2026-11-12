@@ -31,20 +31,22 @@ struct br_found {uint32_t version, apids; int apid, owner;};
 
 static inline uint32_t br_cmd(uint8_t op, uint8_t byte_addr, uint8_t bc) {return ((uint32_t)op << 27) | ((uint32_t)byte_addr << 4) | (bc & 7u);}
 
-// Version, APID count and the APID that serves the SDAM peripheral for this EE. 0 on success; every refusal has its own code.
-static inline int br_find(const struct br_arbiter *a, struct br_found *f) {
+// Version, APID count and the APID that serves peripheral ppid (SID << 8 | peripheral) for this EE. 0 on success; every refusal has its own code.
+static inline int br_find_ppid(const struct br_arbiter *a, uint32_t ppid, struct br_found *f) {
   f->version = a->core[0]; f->apids = a->core[BR_FEATURES / 4] & BR_FEATURES_APIDS_MASK; f->apid = -1; f->owner = -1;
   if (f->version < BR_VERSION_V7_MIN || f->version >= BR_VERSION_V8_MIN) return 1;   // not the layout this code knows
   if (!f->apids || f->apids > 1024) return 2;
   for (uint32_t i = 0; i < f->apids; ++i) {
     uint32_t map = a->core[(BR_APID_MAP + 4 * i) / 4];
-    if (!map || ((map >> 8) & 0xfff) != BR_SDAM_PPID) continue;
+    if (!map || ((map >> 8) & 0xfff) != ppid) continue;
     int owner = (int)(a->cnfg[(BR_CNFG_OWNER + 4 * i) / 4] & 7u);
     // As the mainline driver picks it: the first mapping, replaced by one this EE owns.
     if (f->apid < 0 || owner == a->ee) {f->apid = (int)i; f->owner = owner;}
   }
   return f->apid < 0 ? 3 : 0;
 }
+// The reboot-reason SDAM.
+static inline int br_find(const struct br_arbiter *a, struct br_found *f) {return br_find_ppid(a, BR_SDAM_PPID, f);}
 static inline int br_wait(volatile uint32_t *base) {
   for (unsigned n = 0; n < BR_POLLS; ++n) {
     uint32_t s = base[BR_STATUS / 4];

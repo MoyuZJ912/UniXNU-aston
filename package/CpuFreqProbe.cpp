@@ -30,6 +30,12 @@
 // domain included: the render server also runs on the A510 cores (i566 profile: 23 % of backboardd's samples on cpus 0-2) and they
 // sat at 307 MHz. i565 held the P domains at the top during frames and counted a domain's busy share as the sum of its CPUs: d1 then
 // never left 2803 MHz (99 % busy), so both are gone; a touch still holds the P domains at the top.
+// Board tuning (aston, 2026-11-12: warm at rest, the A715/A710 domain at a mean 2043 MHz with its busiest CPU 42 % busy; Android runs
+// WALT with uag at target load 80 and a hispeed frequency, not the top): `sheng-cpufreq-pfloor-pct=<n>` (default 0; sheng's 50) is the P domains'
+// floor outside a boost and the 12 quiet windows, in % of their highest level (0: none); `sheng-cpufreq-hispeed-pct=<n>` (default 60; sheng's 100)
+// is where a domain whose busiest CPU reached 90 % jumps to, in % of its highest level: below it the domain goes there, at or above it
+// the usual 1.25 x busy x frequency applies (100: the highest level, as before); `sheng-cpufreq-l3=2` (the default) lets the L3 follow
+// the CPUs, at the lowest L3 level at or above the highest of the domains' frequency shares of their maxima (1: mode 3's highest L3 level).
 // Throttle count: in a window where a domain's busiest CPU was at least half busy, its domain state (the frequency the hardware
 // runs, which also drops while the whole cluster idles) under 80 % of the vote counts as a throttled window, with the lowest seen.
 #include <IOKit/IOService.h>
@@ -174,7 +180,23 @@ struct Levels {
 };
 Levels gLevels[3];
 uint32_t gFloorKHz;
-unsigned gBoostMs, gFrameMs, gFramePct;
+unsigned gBoostMs, gFrameMs, gFramePct, gPFloorPct = 0, gHispeedPct = 60, gL3Mode = 2;
+// sheng-cpufreq-l3=2: the L3's LUT levels in ascending frequency, as buildLevels makes them for a domain (the L3 has no turbo rows).
+Levels gL3Levels;
+void buildL3Levels() {
+    Levels &l = gL3Levels;
+    l.count = 0;
+    uint32_t prev = 0;
+    for (unsigned i = 0; i < kLutEntries; ++i) {
+        const uint32_t khz = lutKHz(rd32(gL3.va, kRegFreqLut + i * 4));
+        if (i > 0 && khz == prev) break;
+        prev = khz;
+        if (gCapKHz && khz > gCapKHz) continue;
+        unsigned at = l.count;
+        while (at > 0 && l.khz[at - 1] > khz) {l.khz[at] = l.khz[at - 1]; l.index[at] = l.index[at - 1]; --at;}
+        l.khz[at] = khz; l.index[at] = (uint8_t)i; ++l.count;
+    }
+}
 
 void buildLevels(unsigned d) {
     Levels &l = gLevels[d];
@@ -269,10 +291,14 @@ void governorThread(void *, wait_result_t) {
                 ready[d] = true;
             }
             unsigned want = l.count - 1;
-            if (busy[d] < 900) {
+            const uint64_t hispeedKHz = (uint64_t)l.khz[l.count - 1] * gHispeedPct / 100;
+            if (busy[d] < 900 || l.khz[cur[d]] >= hispeedKHz) {
                 const uint64_t need = l.khz[cur[d]] * busy[d] * 125 / 100000;
                 want = 0;
                 while (want + 1 < l.count && l.khz[want] < need) ++want;
+            } else {
+                want = 0;
+                while (want + 1 < l.count && l.khz[want] < hispeedKHz) ++want;
             }
             if (busy[d] >= 500 && cur[d] < l.count) {
                 const uint32_t stateKHz = (rd32(w.va, kRegDomainState) & 0xff) * kXoKHz;
@@ -289,7 +315,7 @@ void governorThread(void *, wait_result_t) {
                 quiet[d] = busy[d] < 100 ? quiet[d] + 1 : 0;
                 if (boost) want = l.count - 1;
                 else if (quiet[d] < 12)
-                    while (want + 1 < l.count && l.khz[want] * 2 < l.khz[l.count - 1]) ++want;
+                    while (want + 1 < l.count && (uint64_t)l.khz[want] * 100 < (uint64_t)l.khz[l.count - 1] * gPFloorPct) ++want;
             }
             if (want > cur[d]) {
                 cur[d] = want; down[d] = 0; setLevel(d, want); ++changes[d];
@@ -303,6 +329,25 @@ void governorThread(void *, wait_result_t) {
             rec.vote_mhz[d] = (uint16_t)(l.khz[cur[d]] / 1000);
             rec.state_mhz[d] = (uint16_t)((rd32(w.va, kRegDomainState) & 0xff) * kXoKHz / 1000);
             rec.busy_pm[d] = (uint16_t)busy[d];
+        }
+        if (gL3Mode == 2 && gL3.va && (rd32(gL3.va, kRegEnable) & 1)) {
+            if (!gL3Levels.count) buildL3Levels();
+            uint64_t share = 0;   // per mille of the domain's highest level, the highest over the domains
+            for (unsigned d = 0; d < 3; ++d)
+                if (ready[d] && gLevels[d].count) {
+                    const uint64_t pm = (uint64_t)gLevels[d].khz[cur[d]] * 1000 / gLevels[d].khz[gLevels[d].count - 1];
+                    if (pm > share) share = pm;
+                }
+            if (gL3Levels.count) {
+                const uint64_t need = (uint64_t)gL3Levels.khz[gL3Levels.count - 1] * share / 1000;
+                unsigned at = 0;
+                while (at + 1 < gL3Levels.count && gL3Levels.khz[at] < need) ++at;
+                if (gL3.voted != (int)gL3Levels.index[at]) {
+                    wr32(gL3.va, kRegL3Vote, gL3Levels.index[at]);
+                    gL3.voted = (int)gL3Levels.index[at];
+                    gL3.votedKHz = gL3Levels.khz[at];
+                }
+            }
         }
         IOLockUnlock(gLock);
         if (native_cpufreq_rec *ring = native_cpufreq_ring) {
@@ -348,6 +393,11 @@ extern "C" void sheng_cpufreq_probe(void) {
     gFrameMs = frameMs;
     gFramePct = framePct > 100 ? 100 : framePct;
     gFloorKHz = minMHz * 1000;
+    PE_parse_boot_argn("sheng-cpufreq-pfloor-pct", &gPFloorPct, sizeof(gPFloorPct));
+    PE_parse_boot_argn("sheng-cpufreq-hispeed-pct", &gHispeedPct, sizeof(gHispeedPct));
+    PE_parse_boot_argn("sheng-cpufreq-l3", &gL3Mode, sizeof(gL3Mode));
+    if (gPFloorPct > 100) gPFloorPct = 100;
+    if (gHispeedPct > 100) gHispeedPct = 100;
     if (!mode || gLock) return;
     gLock = IOLockAlloc();
     if (!gLock) return;

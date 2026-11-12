@@ -42,6 +42,8 @@ extern "C" uint32_t qcom_ucsi_tick(uint8_t *) __attribute__((weak_import));
 extern "C" bool qcom_ucsi_polling(void) __attribute__((weak_import));
 extern "C" ShengAdspChannel *sheng_adsp_channel(const char *, uint32_t, uint32_t, int, const ShengAdspClient *, void *) __attribute__((weak_import));
 extern "C" int sheng_adsp_send(ShengAdspChannel *, const void *, uint32_t) __attribute__((weak_import));
+// AstonSocBackup.c: the level shown, for the byte Android shows first after a boot.
+extern "C" void aston_soc_backup_note(int percent) __attribute__((weak_import));
 // [0] stage (1 class up, 2 channel registered, 3 channel up, 4 published; negative: the step that failed), [1] percent, [2] mV,
 // [3] mA, [4] temperature (raw), [5] flags (bit 0 present, 1 external, 2 charging, 3 full, 4 notifications enabled), [6] refresh
 // cycles, [7] answers, [8] timeouts | errors << 16, [9] notifications, [10] USB type (raw), [11] full mAh, [12] design mAh,
@@ -351,6 +353,7 @@ class ShengBattery : public IOPMPowerSource {
         ShengBatterySnapshot s;
         aston_gauge_snapshot(&self->gauge, &s);
         self->publishSnapshot(s, false);
+        if (s.charge_known && aston_soc_backup_note) aston_soc_backup_note(s.percent);
         sender->setTimeoutMS(self->published ? kGaugeMs : kGaugeFirstMs);
     }
 

@@ -1782,12 +1782,14 @@ void gpuStart() {
 // 16 ms it takes the frequency that would have kept that window 50 % busy (msm_gpu_devfreq's upthreshold 50) and goes up at once to
 // the lowest level at or above 1.1 x of it, to the top after a window over 85 % busy or 50 ms busy without a break; it goes down one
 // level after 4 windows in a row (5 right after a step up) that would have needed at most 0.8 x the next lower level, and back to the
-// floor after 80 ms without work. `sheng-gpu-dcvs-min` is the floor level (default 3, 348 MHz). Each change is the same HFI
+// floor after 80 ms without work. `sheng-gpu-dcvs-min` is the floor level (default 1, 220 MHz, Android's lowest kgsl level in use on
+// this phone; sheng's 3, 348 MHz). Each change is the same HFI
 // GX_BW_PERF_VOTE as the boot vote, with that level's bandwidth. OPP MHz in sheng-gmu's table order.
 // Two boosts, because the first frames of an animation are the ones a window-based governor serves at the floor (i560: the frames of an
 // app launch took 30-36 ms to finish at 348 MHz, the 10 s windows around them 348 MHz 94-100 % of the time): work after the idle drop
 // starts at the lowest level at or above max(2 x now, 578 MHz) for 50 ms, and a touch report holds the top level until
-// `sheng-gpu-dcvs-boost-ms` (default 1000, 0 = off) after the last one. [13] counts the touch boosts started.
+// `sheng-gpu-dcvs-boost-ms` (default 300, sheng's 1000; 0 = off) after the last one: aston boot 8 spent 72-88 % of its time at 680 MHz
+// with the GPU 27-32 % busy. [13] counts the touch boosts started.
 constexpr uint32_t kGpuMHz[9] = {0, 220, 295, 348, 401, 475, 550, 615, 680};
 constexpr unsigned kGpuTop = 8;
 extern "C" {
@@ -1859,7 +1861,7 @@ void gpuPerfTick(uint64_t busyTicks) {
 }
 void gpuDcvsThread(void *, wait_result_t) {
     ShengGmuIo &io = gColdDevice.io;
-    unsigned floor = bootArg("sheng-gpu-dcvs-min", 3);
+    unsigned floor = bootArg("sheng-gpu-dcvs-min", 1);
     if (floor < 1) floor = 1;
     if (floor > kGpuTop) floor = kGpuTop;
     io.write32(io.cookie, ShengGmuCore, kGmuReg(0x23b0e), 0xff000000u);
@@ -1874,7 +1876,7 @@ void gpuDcvsThread(void *, wait_result_t) {
     uint64_t runNs = 0, winBusy = 0, winNs = 0, atLevel[kGpuTop + 1] = {};
     unsigned down = 0, hold = 0;
     uint64_t boostAbs = 0, touchEnd = 0, wakeEnd = 0, wakeAbs = 0;
-    nanoseconds_to_absolutetime((uint64_t)bootArg("sheng-gpu-dcvs-boost-ms", 1000) * 1000000, &boostAbs);
+    nanoseconds_to_absolutetime((uint64_t)bootArg("sheng-gpu-dcvs-boost-ms", 300) * 1000000, &boostAbs);
     nanoseconds_to_absolutetime(50000000ull, &wakeAbs);
     uint32_t touches = &native_hid_input_events ? native_hid_input_events[6] : 0;
     bool idle = false;

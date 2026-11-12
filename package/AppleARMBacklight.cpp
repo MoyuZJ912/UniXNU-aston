@@ -38,6 +38,8 @@ extern "C" {extern volatile int32_t native_backlight_stats[16];}
 // with no status bit set, [5] the last status an interrupt saw.
 extern "C" {volatile int32_t native_backlight_request[6];}
 extern "C" int armcpu_spi_attach(uint32_t, bool, void (*)(void *), void *, uint32_t *, uint64_t *) __attribute__((weak_import));
+extern "C" int aston_panel_open(void) __attribute__((weak_import));
+extern "C" int aston_panel_level(uint32_t level) __attribute__((weak_import));
 
 namespace {
 constexpr uint64_t kGcc = 0x100000, kSeA = 0xa84000, kSeB = 0x988000;
@@ -50,8 +52,14 @@ constexpr uint8_t kAddress = 0x11, kBrtLsb = 0x04, kBrtMsb = 0x05;
 // The range CoreBrightness works in. The top level stands for kMaxNits: the panel's luminance has not been measured, so these set the slider's
 // scale, not an absolute brightness. kMidNits is CoreBrightness's own default.
 constexpr uint32_t kMinNits = 2, kMidNits = 140, kMaxNits = 500;
-constexpr uint32_t kMaxLevel = 2047, kStepMs = 16, kPollMs = 1, kStepDeadlineMs = 25, kAttachMs = 250, kAttachTries = 240;
+constexpr uint32_t kStepMs = 16, kPollMs = 1, kStepDeadlineMs = 25, kAttachMs = 250, kAttachTries = 240;
 
+// The levels the hardware takes: sheng's KTZ8866 11 bits; the Ace 3 panel's normal range, 1..3349 (AstonPanel.cpp; above is its high
+// brightness mode, which iOS's slider does not reach).
+uint32_t kMaxLevel = 2047;
+// sheng-backlight=2 (aston): the level goes to the panel as a DCS command (AstonPanel.cpp) on the work loop instead of to the I2C engines.
+bool gPanel = false;
+constexpr uint32_t kPanelMaxLevel = 3349, kPanelDefaultLevel = 1638;
 struct Window {IOMemoryMap *map; volatile uint32_t *va;};
 Window gGcc, gSe[2];
 volatile uint32_t gIrqStatus[2];
@@ -228,6 +236,12 @@ class ShengBacklight : public IOService {
     }
 
     void setLevel(uint32_t value) {
+        if (gPanel) {
+            // At most two 50 ms waits on this work loop; a level that did not go out is sent again with the next one.
+            if (aston_panel_level(value)) {bump(5); native_backlight_stats[9] = 0x100;}
+            else {bump(15); native_backlight_stats[2] = (int32_t)value;}
+            return;
+        }
         target = value;
         kick(0); kick(1);
         armTick();
@@ -365,6 +379,19 @@ class ShengBacklight : public IOService {
         native_backlight_stats[0] = impersonated ? 4 : 3;
     }
 public:
+    // sheng-backlight=2: no engines and no interrupts; the panel's level is not read back, the service starts at the panel's default
+    // and CoreBrightness sets its own at once.
+    bool startPanel() {
+        loop = IOWorkLoop::workLoop();
+        fade = IOTimerEventSource::timerEventSource(this, &ShengBacklight::fadeStep);
+        request = IOTimerEventSource::timerEventSource(this, &ShengBacklight::requestFired);
+        if (!loop || !fade || !request || loop->addEventSource(fade) || loop->addEventSource(request)) return false;
+        native_backlight_stats[3] = (int32_t)kPanelDefaultLevel;
+        native_backlight_stats[4] = -1;
+        native_backlight_stats[0] = 2;
+        publishFirst();
+        return true;
+    }
     bool startBacklight(const bool usable[2]) {
         loop = IOWorkLoop::workLoop();
         fade = IOTimerEventSource::timerEventSource(this, &ShengBacklight::fadeStep);
@@ -443,6 +470,20 @@ OSDefineDefaultStructors(ShengBacklight, IOService)
 #else
 OSDefineMetaClassAndStructors(ShengBacklight, IOService)
 #endif
+
+// sheng-backlight=2 (aston), called by BacklightProbe.cpp once this file's classes are registered: the panel's DCS brightness.
+extern "C" void aston_backlight_start(void) {
+    if (!aston_panel_open || !aston_panel_level || aston_panel_open()) {fail(1, -19); return;}
+    gPanel = true;
+    kMaxLevel = kPanelMaxLevel;
+    native_backlight_stats[0] = 1;
+    ShengBacklight *backlight = OSTypeAlloc(ShengBacklight);
+    if (!backlight || !backlight->init() || !backlight->attach(IOService::getPlatform()) || !backlight->startPanel()) {
+        if (backlight) backlight->release();
+        fail(3, -19); return;
+    }
+    backlight->release();
+}
 
 // Called by BacklightProbe.cpp once this file's classes are registered (its static initializer runs between preModLoad and postModLoad).
 // The service starts with the engines' level reads in flight and publishes itself when they are answered.

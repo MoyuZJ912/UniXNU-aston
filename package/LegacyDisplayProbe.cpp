@@ -512,10 +512,12 @@ extern "C" void sheng_dpu_probe(void);
 extern "C" void aston_boot_screen_probe(void);
 extern "C" void aston_halt_restart_install(void);
 extern "C" void aston_display_window_probe(void);
+extern "C" void aston_storage_traits_install(void);
 void native_legacy_display_late_probe(void) {
     aston_display_window_probe();  // aston-display=1: black panel borders around iOS's window (AstonDisplayWindow.cpp)
     aston_boot_screen_probe();  // first: the boot screen takes the framebuffer until iOS draws (AstonBootScreen.cpp)
     aston_halt_restart_install();  // restart and power off through PSCI (AstonHaltRestart.c)
+    aston_storage_traits_install();  // block storage devices count as internal for Settings' storage sizes (AstonStorageTraits.cpp)
     native_keystore_probe();
     sheng_cpufreq_probe();
     sheng_gpu_power_probe();

@@ -102,7 +102,7 @@ panic_screen = true
 # (sheng-gpu-addon=1), the pack's fuel gauge (sheng-battery=2: bq28z610 on QUP2 SE0, read only) and scale 3 (421x927 points, the
 # physical size of an iPhone at 3x on this 452 ppi panel). The payload menu (.github/workflows/package.yml) also offers the same boot
 # at scale 2 and the first test's CPU display path, for comparison and as a fallback.
-# Not ported to this board yet: sheng-backlight (DCS brightness through the Iris7P bridge), sheng-adsp, sheng-audio, sheng-wifi,
+# Not ported to this board yet: sheng-adsp, sheng-audio, sheng-wifi,
 # sheng-bluetooth, sheng-usb.
 kernel_args = [
   "-v", "serial=3", "debug=0x14e", "kt_fixed_zones=120", "-no_slto_panic", "use_contiguous_hint=0",
@@ -126,6 +126,8 @@ kernel_args = [
   # The battery values come from the pack's fuel gauge (sheng-battery=2); charging itself is the battery manager in the audio DSP, so
   # the DSP is started (sheng-adsp=2, firmware read in place from modem_a, adspslpi 0x9ea00000 + 0x4880000 on this board).
   "sheng-battery=2", "sheng-adsp=2",
+  # Panel brightness: DCS 0x51 to the AA551 panel over DSI0 (AstonPanel.cpp) for the iOS brightness service (AppleARMBacklight.cpp).
+  "sheng-backlight=2",
   # No sheng-staged-apps: on 27 the deletable system apps come through the staged apps union, and a copy in Data makes the
   # first-boot migration install them as system app upgrades, which installd refuses ("System app upgrade is missing upgrade
   # entitlement"; iPadOS boot 6, DMLastMigrationResults success = false).

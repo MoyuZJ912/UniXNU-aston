@@ -93,6 +93,9 @@ extern volatile int aston_ifnamer_status __attribute__((weak_import));
 // aston: the display window (patches/xnu-12377/aston-display-window.patch, package/AstonDisplayWindow.cpp).
 extern uint32_t aston_display_window[6] __attribute__((weak_import));
 extern volatile int32_t aston_display_window_state __attribute__((weak_import));
+extern volatile int32_t aston_panel_stats[12] __attribute__((weak_import));
+extern volatile int32_t aston_soc_backup_stats[8] __attribute__((weak_import));
+extern volatile int32_t aston_storage_traits[3] __attribute__((weak_import));
 extern volatile int native_staged_union_stage __attribute__((weak_import));
 extern volatile int native_staged_union_status __attribute__((weak_import));
 extern volatile int native_gpu_addon5_status __attribute__((weak_import));
@@ -498,6 +501,20 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
     snprintf(row, sizeof row, "[display window] x=%u y=%u w=%u h=%u panel=%ux%u borders=%d", aston_display_window[0],
              aston_display_window[1], aston_display_window[2], aston_display_window[3], aston_display_window[4], aston_display_window[5],
              &aston_display_window_state ? (int)aston_display_window_state : 0);
+    at = put(out, at, cap, row, sizeof row);
+  }
+  // The panel's DCS brightness (AstonPanel.cpp, sheng-backlight=2): stage, DSI HW_VERSION, DSI_CTRL, commands sent, timed out, last and
+  // longest command (us), last level; Android's backup level byte (AstonSocBackup.c): state, APID, owner EE, the byte at start, last level
+  // written, writes, failures, last error; storage devices marked internal (AstonStorageTraits.cpp): notification, marked, had one.
+  if (&aston_panel_stats || &aston_soc_backup_stats || &aston_storage_traits) {
+    char row[200];
+    const volatile int32_t *p = &aston_panel_stats ? aston_panel_stats : 0, *b = &aston_soc_backup_stats ? aston_soc_backup_stats : 0,
+                           *t = &aston_storage_traits ? aston_storage_traits : 0;
+    snprintf(row, sizeof row, "[aston] panel st=%d hw=%x ctrl=%x sent=%d tmo=%d us=%d/%d lvl=%d | soc st=%d apid=%d owner=%d cell0=%d last=%d "
+             "w=%d fail=%d err=%d | storage st=%d marked=%d had=%d",
+             p ? p[0] : 0, p ? p[1] : 0, p ? p[2] : 0, p ? p[6] : 0, p ? p[7] : 0, p ? p[8] : 0, p ? p[10] : 0, p ? p[9] : 0,
+             b ? b[0] : 0, b ? b[1] : 0, b ? b[2] : 0, b ? b[3] : 0, b ? b[4] : 0, b ? b[5] : 0, b ? b[6] : 0, b ? b[7] : 0,
+             t ? t[0] : 0, t ? t[1] : 0, t ? t[2] : 0);
     at = put(out, at, cap, row, sizeof row);
   }
   // The payload's GPU addon (kern_exec.c native_gpu_addon_install): files in it (-1 none), written, already equal, failed, last error; then
