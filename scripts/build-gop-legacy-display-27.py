@@ -498,10 +498,11 @@ print(f'HID: {len(hid_bindings)} original IOHIDDevice bindings, vtables {hid_vta
 board_dir = OUT / 'board'
 board_dir.mkdir(exist_ok=True)
 KITS = ROOT / 'kits/sheng'
-# aston: the WiFi stack (WifiProbe, WifiNet and the ath12k driver objects, about 0.9 MiB of code) is left out unless ASTON_WIFI=1.
-# The board's WiFi is not ported, and the iPhone17,2 fileset leaves too little room after its retained kexts for the native kernel
-# with it (CI 42813298463: "Native code would collide with collection data"; the iPad17,3 kernel fit with 80 KiB to spare). The
-# board code reaches the WiFi stack only through weak references (LegacyDisplayProbe, BluetoothProbe, BootLog, BootDiagExport).
+# aston: the WiFi stack (WifiProbe, WifiNet and the ath12k driver objects, about 0.9 MiB of code and 75 KiB of data) is left out
+# unless ASTON_WIFI=1 (the package workflow sets it). The iPhone17,2 fileset leaves little room after its retained kexts for the
+# native kernel (CI 42813298463: "Native code would collide with collection data"); CI 43018454672 without WiFi left 1088 KiB of
+# code and 32 KiB of __DATA, and ShengUfs' 128 KiB scratch buffer is now allocated at run time. The board code reaches the WiFi
+# stack only through weak references (LegacyDisplayProbe, BluetoothProbe, BootLog, BootDiagExport).
 WITH_WIFI = os.environ.get('ASTON_WIFI') == '1'
 # As on iPadOS 17, ATH12K_WIFI_DIR names a checkout whose deps/linux holds the driver sources.
 WIFI = Path(os.environ.get('ATH12K_WIFI_DIR') or DEVICE / 'drivers/Ath12kWifi')

@@ -10,6 +10,14 @@
     model = "OnePlus Ace 3 PJE110";
     compatible = "oneplus,aston", "oneplus,pje110", "qcom,sm8550";
 
+    // The WCN7850 on PCIe0, exported (/arm-io/wlan) before launchd evaluates wifid's device-tree condition, as on the reference
+    // board. WifiProbe owns the PCIe resources and fills local-mac-address at runtime.
+    wlan {
+        compatible = "qcom,wcn7850";
+        unixnu,adt-name = "wlan";
+        status = "okay";
+    };
+
     // Handoff window as on the reference board: DarwinBoot owns its kernel window through UEFI AllocatePages (owned_memory_size).
     memory@80000000 {
         device_type = "memory";

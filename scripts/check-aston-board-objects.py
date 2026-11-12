@@ -15,6 +15,8 @@ import sys
 
 CPP = ['TouchProbe', 'ButtonProbe', 'BatteryProbe', 'ShengBattery', 'AstonDisplayWindow', 'AstonStorageTraits', 'AstonPanel', 'AppleARMBacklight', 'BacklightProbe', 'CpuFreqProbe']
 C = ['S3910', 'AstonGaugeBus', 'AstonGauge', 'BootLog', 'AstonHaltRestart', 'AstonSocBackup']
+# With BSD flags, as build-sheng-source-storage.py compiles them (the VFS readers).
+BSD = ['WifiFirmware']
 
 
 def recipe(tree, name):
@@ -55,6 +57,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     cpp_record = recipe(tree, 'iokit/DEVELOPMENT/IOPlatformExpert.cpo.json')
     c_record = recipe(tree, 'osfmk/DEVELOPMENT/startup.o.json')
+    bsd_record = recipe(tree, 'bsd/DEVELOPMENT/kern_exec.o.json')
     common = ['-I', str(tree / '.cache/xnu-work/osfmk'), '-I', str(device / 'package'), '-I', str(unixnu / 'drivers/QcomGeniSpi')]
     soc = sorted((unixnu / 'out/feeds').glob('UniXNU-sm8550-common-*/kits/Sm8550Platform'))
     if soc:
@@ -67,7 +70,8 @@ def main():
     c_extra = ['-Wall', '-Wextra', '-Werror', '-mgeneral-regs-only', *host, *common]
     wanted = set(args.sources)
     failures = 0
-    for stems, record, extra, suffix in ((CPP, cpp_record, cpp_extra, '.cpp'), (C, c_record, c_extra, '.c')):
+    for stems, record, extra, suffix in ((CPP, cpp_record, cpp_extra, '.cpp'), (C, c_record, c_extra, '.c'),
+                                         (BSD, bsd_record, c_extra, '.c')):
         for stem in stems:
             if wanted and stem not in wanted:
                 continue

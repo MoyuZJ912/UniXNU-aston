@@ -13,6 +13,7 @@
 #endif
 #include <mach/mach_vm.h>
 #include <sys/param.h>
+#include <sys/errno.h>
 #if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
 #include "verified_root.h"
 #include "VerifiedBlockPolicy.h"
@@ -1703,6 +1704,35 @@ bool NativeUfsBlock::configure (const char *name, uint64_t absoluteOffset, uint6
 static RootWindow gRootObject[4];
 static uint32_t gRootObjects;
 static uint64_t gRootObjectBase;
+
+// aston: a data object for other kernel code (the Wi-Fi firmware object "Wifi", package/WifiFirmware.c): `bytes` bytes at `offset`
+// (a multiple of 4096) of object `name` into `dst`. With dst null only *size (the object's size) is set. 0, or ENOENT (no such
+// object, or no root), EINVAL (outside the object), ENOMEM, EIO. The bytes are untrusted; the caller checks their digests.
+extern "C" int native_ufs_object_read (const char *name, uint64_t offset, void *dst, uint64_t bytes, uint64_t *size)
+{
+  const RootWindow *object = nullptr;
+  for (unsigned i = 0; name && i < gRootObjects; ++i)
+    if (!strcmp (gRootObject[i].name, name)) object = &gRootObject[i];
+  if (!object || !gHost.ready) return ENOENT;
+  if (size) *size = object->size;
+  if (!dst) return 0;
+  if ((offset & 4095) || offset > object->size || bytes > object->size - offset) return EINVAL;
+  uint8_t *bounce = static_cast<uint8_t *> (IOMallocData (kDataMax));
+  if (!bounce) return ENOMEM;
+  uint64_t lba = (gRootObjectBase + object->offset + offset) / 4096, done = 0;
+  int rc = 0;
+  while (done < bytes) {
+    uint64_t left = bytes - done;
+    uint32_t blocks = static_cast<uint32_t> (left >= kDataMax ? kDataMax / 4096 : (left + 4095) / 4096);
+    if (hostRead4k (0, lba, blocks, bounce) != kIOReturnSuccess) {rc = EIO; break;}
+    uint64_t take = left < blocks * 4096ULL ? left : blocks * 4096ULL;
+    memcpy (static_cast<uint8_t *> (dst) + done, bounce, take);
+    done += take;
+    lba += blocks;
+  }
+  IOFreeData (bounce, kDataMax);
+  return rc;
+}
 
 #if defined(NATIVE_VERIFIED_BLOCK) && NATIVE_VERIFIED_BLOCK
 volatile uint64_t native_ufs_verified_blocks = 0;

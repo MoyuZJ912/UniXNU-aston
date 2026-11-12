@@ -96,6 +96,10 @@ extern volatile int32_t aston_display_window_state __attribute__((weak_import));
 extern volatile int32_t aston_panel_stats[12] __attribute__((weak_import));
 extern volatile int32_t aston_soc_backup_stats[8] __attribute__((weak_import));
 extern volatile int32_t aston_storage_traits[3] __attribute__((weak_import));
+extern volatile int32_t aston_wifi_object_stats[5] __attribute__((weak_import));
+// ArmCpu's deep idle (unixnu-patches/ArmCpu/0001-psci-cpu-suspend-idle.patch, armcpu-idle).
+extern volatile int32_t armcpu_idle_info[4] __attribute__((weak_import));
+extern volatile int32_t armcpu_idle_stats[8][8] __attribute__((weak_import));
 extern volatile int native_staged_union_stage __attribute__((weak_import));
 extern volatile int native_staged_union_status __attribute__((weak_import));
 extern volatile int native_gpu_addon5_status __attribute__((weak_import));
@@ -515,6 +519,26 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
              p ? p[0] : 0, p ? p[1] : 0, p ? p[2] : 0, p ? p[6] : 0, p ? p[7] : 0, p ? p[8] : 0, p ? p[10] : 0, p ? p[9] : 0,
              b ? b[0] : 0, b ? b[1] : 0, b ? b[2] : 0, b ? b[3] : 0, b ? b[4] : 0, b ? b[5] : 0, b ? b[6] : 0, b ? b[7] : 0,
              t ? t[0] : 0, t ? t[1] : 0, t ? t[2] : 0);
+    at = put(out, at, cap, row, sizeof row);
+  }
+  // The root image object "Wifi" (WifiFirmware.c): state (1 header valid; -1 no object, -2 read, -3 magic or count, -4 header digest),
+  // files in it, files served, digest mismatches, last error.
+  if (&aston_wifi_object_stats) {
+    char row[96];
+    snprintf(row, sizeof row, "[aston] wifi object st=%d files=%d served=%d bad=%d err=%d", aston_wifi_object_stats[0],
+             aston_wifi_object_stats[1], aston_wifi_object_stats[2], aston_wifi_object_stats[3], aston_wifi_object_stats[4]);
+    at = put(out, at, cap, row, sizeof row);
+  }
+  // Deep idle: mode in effect, PSCI_VERSION, PSCI_FEATURES(CPU_SUSPEND), why it stopped; per core requests/powered down/returned/
+  // refused, milliseconds powered down, the latest wake after the deadline (us), cluster requests.
+  if (&armcpu_idle_info && &armcpu_idle_stats) {
+    char row[360];
+    int n = snprintf(row, sizeof row, "[idle] mode=%d psci=%x feat=%x stop=%d |", armcpu_idle_info[0], armcpu_idle_info[1],
+                     armcpu_idle_info[2], armcpu_idle_info[3]);
+    for (unsigned c = 0; c < 8 && n > 0 && n < (int)sizeof row; ++c) {
+      const volatile int32_t *s = armcpu_idle_stats[c];
+      n += snprintf(row + n, sizeof row - (size_t)n, " c%u %d/%d/%d/%d %dms %dus k%d", c, s[0], s[1], s[2], s[3], s[7], s[5], s[6]);
+    }
     at = put(out, at, cap, row, sizeof row);
   }
   // The payload's GPU addon (kern_exec.c native_gpu_addon_install): files in it (-1 none), written, already equal, failed, last error; then

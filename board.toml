@@ -102,8 +102,7 @@ panic_screen = true
 # (sheng-gpu-addon=1), the pack's fuel gauge (sheng-battery=2: bq28z610 on QUP2 SE0, read only) and scale 3 (421x927 points, the
 # physical size of an iPhone at 3x on this 452 ppi panel). The payload menu (.github/workflows/package.yml) also offers the same boot
 # at scale 2 and the first test's CPU display path, for comparison and as a fallback.
-# Not ported to this board yet: sheng-adsp, sheng-audio, sheng-wifi,
-# sheng-bluetooth, sheng-usb.
+# Not ported to this board yet: sheng-audio, sheng-bluetooth, sheng-usb.
 kernel_args = [
   "-v", "serial=3", "debug=0x14e", "kt_fixed_zones=120", "-no_slto_panic", "use_contiguous_hint=0",
   "native-source-storage=1", "native-ufs-root=1",
@@ -128,6 +127,10 @@ kernel_args = [
   "sheng-battery=2", "sheng-adsp=2",
   # Panel brightness: DCS 0x51 to the AA551 panel over DSI0 (AstonPanel.cpp) for the iOS brightness service (AppleARMBacklight.cpp).
   "sheng-backlight=2",
+  # Wi-Fi: the reference board's mainline ath12k runtime (Ath12kWifi, WifiProbe/WifiNet, wpa_supplicant) on this phone's WCN7850
+  # (PCIe0, same pins and rails); firmware and this phone's board data from the root image object "Wifi" (package/WifiFirmware.c,
+  # scripts/make-aston-wifi-object.py), so none of it is in the build. The kernel carries the stack only with ASTON_WIFI=1.
+  "sheng-wifi=5",
   # No sheng-staged-apps: on 27 the deletable system apps come through the staged apps union, and a copy in Data makes the
   # first-boot migration install them as system app upgrades, which installd refuses ("System app upgrade is missing upgrade
   # entitlement"; iPadOS boot 6, DMLastMigrationResults success = false).
@@ -151,6 +154,12 @@ gpu_addon = true
 # Owner overlays of sealed system files, made from the OS image into the GPU addon (unixnu-patches/0003): configd's InterfaceNamer
 # with short wait timeouts, which the kernel mounts over its bundle (patches/xnu-12377/aston-interface-namer-overlay.patch).
 overlay_tool = "scripts/aston-runtime-overlays.py"
+# The Wi-Fi supplicant and its launchd job in the GPU addon, with the merged launchd cache (as the reference board). The WCN7850
+# firmware is not staged here: the kernel reads it from the root image object "Wifi".
+wifi_tool = "scripts/build-wifi-userspace.py"
+wifi_target = "ios27"
+wifi_launchd_cache = true
+wifi_bin_prefix = "wifi-bin"
 
 [payload.runtime.launchd_job_environment."com.apple.iconservices.iconservicesagent"]
 FORCE_SOFTWARE_RENDERER = "0"

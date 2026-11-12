@@ -24,7 +24,19 @@ struct RootLayout {
   uint32_t ext4Blocks;                    // s_blocks_count_lo at byte 1028
 };
 
+#if defined(KERNEL)
+// aston: allocated by the first findRootLayout. A static array of kDataMax bytes took 128 KiB of the kernel's __DATA, which the
+// iPhone17,2 collection leaves the native kernel too little of (it ends at the first retained kext's data).
+static uint8_t *gScratch;
+static bool rootScratch (void)
+{
+  if (!gScratch) gScratch = static_cast<uint8_t *> (IOMallocData (kDataMax));
+  return gScratch != nullptr;
+}
+#else
 static uint8_t gScratch[kDataMax];
+static bool rootScratch (void) { return true; }
+#endif
 
 static uint32_t le32 (const uint8_t *at)
 {
@@ -62,6 +74,10 @@ static bool findRootLayout (RootLayout *layout, const char **why)
 {
   gRootDiagnostic.stage = "GPT header";
   bzero (layout, sizeof (*layout));
+  if (!rootScratch ()) {
+    *why = "scratch allocation";
+    return false;
+  }
   if (hostRead4k (0, 1, 1, gScratch) != kIOReturnSuccess) {
     *why = "GPT header read";
     return false;

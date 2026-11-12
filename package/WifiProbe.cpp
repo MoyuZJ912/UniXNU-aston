@@ -97,6 +97,9 @@ constexpr uint32_t kNeeded = 0xf;   // slv_axi, mstr_axi, cfg_ahb, aux
 constexpr unsigned kGpios[] = {80, 82, 94};
 constexpr uint32_t kParfLtssm = 0x1b0, kParfPhyCtrl = 0x40, kLinkControl = 0x80;
 constexpr unsigned kWlanEn = 80, kPerst = 94, kClkReq = 95;
+// aston: OPLUS' Wi-Fi antenna switch (salami_overlay_common.dtsi, oplus,wlan-wsa: wlan-wsa-gpio = <&tlmm 98 0>, pinctrl-0
+// cnss_wlan_wsa_high: GPIO, 2 mA, pull-up, output high), which Android leaves in that default state.
+constexpr unsigned kAntennaSwitch = 98;
 // gcc-sm8550.c: block resets, the pipe source mux (0 PHY, 2 TCXO) and the aux (TCXO) and rchng (GPLL0 even / 3) sources
 constexpr uint32_t kPcieBcr = 0x6b000, kPhyBcr = 0x6c01c, kPipeMux = 0x6b070, kAuxRcg = 0x6b074, kRchngRcg = 0x6b058;
 constexpr uint32_t kVote8Bits = 0x7f, kVote0Bits = 1u << 12 | 1u << 19 | 1u << 22;
@@ -297,8 +300,12 @@ void pmicPrepare() {
 // that makes the rail (0: not known), used to see whether the request had an effect: SMPS n of a PM8550VS sits at page 0x9b + 3 * (n - 1) of its SID.
 // The pairing of SID 6 with the "g" PMIC and SID 4 with "e" rests on the setpoint registers there reading 852 mV (smps2, smps5 of SID 6), 1304 mV
 // (smps4) and 1856 mV (smps6), and 964 mV for smps4 of SID 4.
+// aston: the same six rails (the phone's devicetree, qcom,cnss-qca-converged/chip_cfg@1, the WCN7850 on PCIe0: vdd-wlan S5G, vdd-wlan-io
+// L15B, vdd-wlan-aon S2G, vdd-wlan-dig S4E, vdd-wlan-rfa2 S4G, vdd-wlan-rfa1 S6G; OnePlus' kalama-cnss.dtsi is the same) at the voltages
+// Android runs them with on this phone: 1.0, 1.8, 0.98, 0.95, 1.35 and 1.9 V (the reference board used mainline's 0.85, 1.8, 0.85, 0.95,
+// 1.3 and 1.86 V).
 struct Rail {const char *name; uint32_t millivolts; uint32_t ppid;};
-constexpr Rail kRails[] = {{"smpg5", 850, 0x6a7}, {"ldob15", 1800, 0}, {"smpg2", 850, 0x69e}, {"smpe4", 950, 0x4a4}, {"smpg4", 1300, 0x6a4}, {"smpg6", 1860, 0x6aa}};
+constexpr Rail kRails[] = {{"smpg5", 1000, 0x6a7}, {"ldob15", 1800, 0}, {"smpg2", 980, 0x69e}, {"smpe4", 950, 0x4a4}, {"smpg4", 1350, 0x6a4}, {"smpg6", 1900, 0x6aa}};
 constexpr uint64_t kRscDrv = 0x17a20000, kRscTcs = 0xd00, kCmdDb = 0x81c60000, kCmdDbSize = 0x20000;
 
 // [20] bit i: rail i found in the command database and voted | 1 << (8 + i) request done; [21] RSC id | TCS << 24 (negative stage on failure)
@@ -1476,6 +1483,7 @@ void bringUp(Window &gcc, Window &tlmm) {
     setPin(t, kWlanEn, 1u | 3u << 6 | 1u << 9, 0);
     IOSleep(150);
     setPin(t, kWlanEn, 1u | 3u << 6 | 1u << 9, 1);
+    setPin(t, kAntennaSwitch, 3u | 1u << 9, 1);
     IOSleep(60);
     native_wifi_stats[10] = pinWord(t);
     // what the pin registers hold now (a write TZ or the hypervisor drops reads back as written-nothing)
@@ -1635,7 +1643,7 @@ void wifiThread(void *arg, wait_result_t) {
     thread_set_thread_name(current_thread(), "sheng-wifi");
     publishMac();
     Window gcc = {}, tlmm = {}, parf = {}, dbi = {};
-    if (!mapWindow(gcc, kGcc, 0x80000) || !mapWindow(tlmm, kTlmm, 0x60000)) {native_wifi_stats[0] = -1; release(gcc); release(tlmm); return;}
+    if (!mapWindow(gcc, kGcc, 0x80000) || !mapWindow(tlmm, kTlmm, 0x63000)) {native_wifi_stats[0] = -1; release(gcc); release(tlmm); return;}
     native_wifi_stats[0] = 1;
     native_wifi_stats[1] = gcc.va[kVote8 / 4];
     native_wifi_stats[2] = gcc.va[kVote0 / 4];

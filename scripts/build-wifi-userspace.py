@@ -22,11 +22,16 @@ component = root / "drivers/Ath12kWifi"
 firmware_prefix = re.search(r'^#define SHENG_WIFI_FIRMWARE_PREFIX "([^"]+)"$',
     (root / "package/WifiFirmware.h").read_text(), re.M).group(1)
 firmware_source = root / "firmware/wcn7850"
-firmware_manifest = json.loads((firmware_source / "manifest.json").read_text())["files"]
-if not {'amss.bin', 'm3.bin', 'board-2.bin'} <= firmware_manifest.keys():
+# aston: no firmware/wcn7850 in this repository. The kernel reads the WCN7850 firmware and the phone's board data from the root image
+# object "Wifi" (package/WifiFirmware.c, scripts/make-aston-wifi-object.py), so the addon carries none.
+firmware_manifest = (json.loads((firmware_source / "manifest.json").read_text())["files"]
+                     if (firmware_source / "manifest.json").is_file() else {})
+if firmware_manifest and not {'amss.bin', 'm3.bin', 'board-2.bin'} <= firmware_manifest.keys():
     raise SystemExit("missing required WCN7850 firmware inputs")
 shutil.rmtree(out / 'firmware', ignore_errors=True)
 (out / 'firmware').mkdir()
+if not firmware_manifest:
+    firmware_prefix = None
 for name, expected in firmware_manifest.items():
     if name not in ('amss.bin', 'amss2.bin', 'm3.bin', 'board-2.bin'):
         raise SystemExit("unsupported WCN7850 firmware name")
