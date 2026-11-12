@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Clones the locked git sources of Ath12kWifi (tools/source-lock.json: linux, freebsd) as pattern-mode sparse checkouts.
+"""Clones the locked git sources of Ath12kWifi (tools/source-lock.json: linux, freebsd) as pattern-mode sparse checkouts, then
+runs the module's own fetch for the rest (the supplicant archive).
 
 Ath12kWifi's tools/fetch-sources.py clones them with `git clone --sparse` and then always runs `git sparse-checkout add` with
 root-anchored patterns ("/drivers/net/wireless/ath/"). A git that starts sparse checkouts in cone mode (the macOS runner's)
@@ -39,6 +40,10 @@ def main():
         if missing:
             raise SystemExit(f'{name}: missing after checkout: {", ".join(missing)}')
         print(f'fetch {name}: {source["ref"]} {head}, {len(source["required"])} required files present')
+    # Then the module's own fetch: the wpa_supplicant release archive (hash-checked and unpacked) and the identity check of every
+    # source. The payload's runtime builds the supplicant (build-wifi-userspace.py, its prepare-supplicant.py only checks) before
+    # the kernel build would run this through build-ath12k-wifi.py.
+    subprocess.run([sys.executable, str(root / 'tools/fetch-sources.py')], check=True)
 
 
 if __name__ == '__main__':
