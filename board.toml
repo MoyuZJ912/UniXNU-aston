@@ -160,6 +160,11 @@ wifi_tool = "scripts/build-wifi-userspace.py"
 wifi_target = "ios27"
 wifi_launchd_cache = true
 wifi_bin_prefix = "wifi-bin"
+# launchd loads spaceattributiond (Settings > iPhone Storage sizes) only where the device tree has /filesystems e-apfs. That property
+# also turns on Enhanced APFS in the APFS kext (new volume format, volume fixups at mount, metadata crypto), so the board does not
+# set it; the merged cache drops the requirement for this job instead (unixnu-patches/0004). Boot 9: "Service cannot be loaded on
+# this hardware", every lookup of com.apple.spaceattributiond failed and Settings read Zero KB.
+launchd_job_device_tree = ["com.apple.spaceattributiond"]
 
 [payload.runtime.launchd_job_environment."com.apple.iconservices.iconservicesagent"]
 FORCE_SOFTWARE_RENDERER = "0"

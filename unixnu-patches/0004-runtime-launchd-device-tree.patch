@@ -1,0 +1,77 @@
+From: aston
+Subject: [PATCH] runtime: drop a device-tree load requirement from selected OS launchd jobs
+
+[payload.runtime] launchd_job_device_tree lists OS jobs whose _LimitLoadToDeviceTree the merged launchd cache removes
+(UniXNU-aston: spaceattributiond, which wants /filesystems e-apfs; that property also switches the APFS kext to Enhanced APFS).
+---
+diff --git a/scripts/build-boot-runtime.py b/scripts/build-boot-runtime.py
+index f905fc1..f1b3d8b 100644
+--- a/scripts/build-boot-runtime.py
++++ b/scripts/build-boot-runtime.py
+@@ -165,8 +165,9 @@ def addon_hashes(path, work, system_bundles=(), system_executables=None):
+     return sorted(set(hashes))
+ 
+ 
+-def merge_launchd_cache(source, daemons, destination, job_environment=None, job_overrides=None):
+-    """Add owner jobs and board-selected environment values to the OS launchd cache."""
++def merge_launchd_cache(source, daemons, destination, job_environment=None, job_overrides=None, job_device_tree=None):
++    """Add owner jobs and board-selected environment values to the OS launchd cache. job_device_tree names OS jobs whose
++    _LimitLoadToDeviceTree requirement the board satisfies by other means: the key is removed, so launchd loads them on it."""
+     original = plistlib.loads(source.read_bytes())
+     merged = plistlib.loads(source.read_bytes())
+     jobs = merged['LaunchDaemons']
+@@ -180,7 +181,7 @@ def merge_launchd_cache(source, daemons, destination, job_environment=None, job_
+             raise ValueError('OS launchd cache already owns ' + key)
+         jobs[key] = job
+         added.append(key)
+-    if not added and not job_environment and not job_overrides:
++    if not added and not job_environment and not job_overrides and not job_device_tree:
+         raise ValueError('no owner launchd jobs or selected OS job changes')
+     assert all(merged[key] == value for key, value in original.items() if key != 'LaunchDaemons')
+     assert all(jobs[key] == value for key, value in original['LaunchDaemons'].items())
+@@ -205,6 +206,13 @@ def merge_launchd_cache(source, daemons, destination, job_environment=None, job_
+             if key == 'UserName' and not re.fullmatch('[a-z_][a-z0-9_-]*', value):
+                 raise ValueError('invalid launchd user for ' + label)
+         matches[0].update(changes)
++    for label in job_device_tree or []:
++        matches = [jobs[key] for key, job in original['LaunchDaemons'].items() if job.get('Label') == label]
++        if len(matches) != 1:
++            raise ValueError(f'expected one OS launchd job for {label}, found {len(matches)}')
++        if '_LimitLoadToDeviceTree' not in matches[0]:
++            raise ValueError(f'OS launchd job {label} has no _LimitLoadToDeviceTree')
++        del matches[0]['_LimitLoadToDeviceTree']
+     destination.parent.mkdir(parents=True, exist_ok=True)
+     # This dictionary is consumed by launchd's private cached-plist parser.
+     # Use the platform serializer for its binary representation.
+@@ -214,8 +222,9 @@ def merge_launchd_cache(source, daemons, destination, job_environment=None, job_
+     return dict(source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+                 output_sha256=hashlib.sha256(destination.read_bytes()).hexdigest(),
+                 original_jobs=len(original['LaunchDaemons']), added_jobs=added,
+-                original_entries_preserved=not job_environment and not job_overrides,
+-                job_environment=job_environment or {}, job_overrides=job_overrides or {}, serializer='Apple plutil binary1')
++                original_entries_preserved=not job_environment and not job_overrides and not job_device_tree,
++                job_environment=job_environment or {}, job_overrides=job_overrides or {},
++                job_device_tree_removed=list(job_device_tree or []), serializer='Apple plutil binary1')
+ 
+ 
+ def sign_launchd_cache(path):
+@@ -329,7 +338,8 @@ def main():
+                 with os_mount(request['os_image'], cache_work) as mount:
+                     cache_report = merge_launchd_cache(mount / 'System/Library/xpc/launchd.plist',
+                         wifi / 'daemons', wifi / 'xpc/launchd.plist', request.get('launchd_job_environment'),
+-                        bluetooth_report['launchd_job_overrides'] if bluetooth_report else None)
++                        bluetooth_report['launchd_job_overrides'] if bluetooth_report else None,
++                        request.get('launchd_job_device_tree'))
+                 cache_report.update(sign_launchd_cache(wifi / 'xpc/launchd.plist'))
+                 extra += ['xpc', wifi / 'xpc']
+                 (out / 'wifi-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
+@@ -347,7 +357,8 @@ def main():
+             cache = work / 'bluetooth-xpc/launchd.plist'
+             with os_mount(request['os_image'], cache_work) as mount:
+                 cache_report = merge_launchd_cache(mount / 'System/Library/xpc/launchd.plist',
+-                    daemons, cache, request.get('launchd_job_environment'), bluetooth_report['launchd_job_overrides'])
++                    daemons, cache, request.get('launchd_job_environment'), bluetooth_report['launchd_job_overrides'],
++                    request.get('launchd_job_device_tree'))
+             cache_report.update(sign_launchd_cache(cache))
+             candidate = work / 'bluetooth-cache-addon.bin'
+             script('addon-add-dir.py', addon, candidate, 'xpc', cache.parent)
