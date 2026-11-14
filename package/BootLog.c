@@ -99,7 +99,7 @@ extern volatile int32_t aston_storage_traits[3] __attribute__((weak_import));
 extern volatile int32_t aston_wifi_object_stats[5] __attribute__((weak_import));
 // ArmCpu's deep idle (unixnu-patches/ArmCpu/0001-psci-cpu-suspend-idle.patch, armcpu-idle).
 extern volatile int32_t armcpu_idle_info[4] __attribute__((weak_import));
-extern volatile uint32_t armcpu_idle_stats[8][8] __attribute__((weak_import));
+extern volatile uint32_t armcpu_idle_stats[8][16] __attribute__((weak_import));
 extern volatile int native_staged_union_stage __attribute__((weak_import));
 extern volatile int native_staged_union_status __attribute__((weak_import));
 extern volatile int native_gpu_addon5_status __attribute__((weak_import));
@@ -530,14 +530,16 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
     at = put(out, at, cap, row, sizeof row);
   }
   // Deep idle: mode in effect, PSCI_VERSION, PSCI_FEATURES(CPU_SUSPEND), why it stopped; per core requests/powered down/returned/
-  // refused, milliseconds powered down, the latest wake after the deadline (us), cluster requests.
+  // refused, milliseconds powered down, the latest wake after the deadline (us), cluster requests; then the hook's entries, those with
+  // the timer off, those whose deadline was under 1 ms/1-4 ms/4 ms-threshold away, and the farthest deadline (ms).
   if (&armcpu_idle_info && &armcpu_idle_stats) {
-    char row[360];
+    char row[720];
     int n = snprintf(row, sizeof row, "[idle] mode=%d psci=%x feat=%x stop=%d |", armcpu_idle_info[0], armcpu_idle_info[1],
                      armcpu_idle_info[2], armcpu_idle_info[3]);
     for (unsigned c = 0; c < 8 && n > 0 && n < (int)sizeof row; ++c) {
       const volatile uint32_t *s = armcpu_idle_stats[c];
-      n += snprintf(row + n, sizeof row - (size_t)n, " c%u %u/%u/%u/%u %ums %uus k%u", c, s[0], s[1], s[2], s[3], s[7], s[5], s[6]);
+      n += snprintf(row + n, sizeof row - (size_t)n, " c%u %u/%u/%u/%u %ums %uus k%u n%u/%u/%u/%u/%u f%u", c, s[0], s[1], s[2], s[3], s[7], s[5],
+                    s[6], s[8], s[9], s[10], s[11], s[12], s[13]);
     }
     at = put(out, at, cap, row, sizeof row);
   }

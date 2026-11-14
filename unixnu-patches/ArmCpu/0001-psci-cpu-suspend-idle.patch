@@ -1,8 +1,8 @@
 diff --git a/ArmCpu.cpp b/ArmCpu.cpp
-index 98b6c3c..aef97ae 100644
+index 98b6c3c..009d97f 100644
 --- a/ArmCpu.cpp
 +++ b/ArmCpu.cpp
-@@ -51,6 +51,26 @@ volatile int32_t armcpu_smp_psci_rc[8];
+@@ -51,6 +51,28 @@ volatile int32_t armcpu_smp_psci_rc[8];
  
  #define ARMCPU_SMP_SLOTS 8
  
@@ -20,8 +20,10 @@ index 98b6c3c..aef97ae 100644
 +// 2 CPU state refused, 3 no PSCI conduit)
 +volatile int32_t armcpu_idle_info[4];
 +// Per logical core (unsigned: the kernel's overflow checks have no handler here): [0] requests, [1] returns through the reset vector,
-+// [2] returns from the call, [3] refused requests, [4] last result (as unsigned), [5] latest wake after the kernel's deadline (us), [6] cluster requests, [7] milliseconds spent powered down
-+volatile uint32_t armcpu_idle_stats[ARMCPU_SMP_SLOTS][8];
++// [2] returns from the call, [3] refused requests, [4] last result (as unsigned), [5] latest wake after the kernel's deadline (us), [6] cluster requests, [7] milliseconds spent powered down,
++// [8] hook entries, [9] entries with the timer off or masked, entries whose deadline was too near: [10] under 1 ms, [11] 1 to 4 ms,
++// [12] 4 ms to armcpu-idle-min-us; [13] the farthest deadline seen (ms)
++volatile uint32_t armcpu_idle_stats[ARMCPU_SMP_SLOTS][16];
 +}
 +
 +static void idleProbe (void);
@@ -29,7 +31,7 @@ index 98b6c3c..aef97ae 100644
  class ArmCpu : public IOCPU {
    OSDeclareDefaultStructors (ArmCpu)
    OSSharedPtr<IOMemoryMap> distributor;
-@@ -78,6 +98,7 @@ class ArmCpu : public IOCPU {
+@@ -78,6 +100,7 @@ class ArmCpu : public IOCPU {
    void enableGic (void);
    void interrupt (void);
    static void dispatch (void *target, void *, void *, int);
@@ -37,7 +39,7 @@ index 98b6c3c..aef97ae 100644
  public:
    IOService *probe (IOService *provider, SInt32 *score) override;
    bool start (IOService *provider) override;
-@@ -482,6 +503,8 @@ bool ArmCpu::start (IOService *provider)
+@@ -482,6 +505,8 @@ bool ArmCpu::start (IOService *provider)
    gController = controller;
    // Newer kernels boot the processor from ml_processor_register, which calls initCPU and enables the GIC and
    // timer; the handler above must already be installed. Older kernels leave initCPU to the driver.
@@ -46,7 +48,7 @@ index 98b6c3c..aef97ae 100644
    perfmon_interrupt_handler_func pmi = nullptr;
    kern_return_t status = ml_processor_register (&info, &machProcessor, &ipi_handler, &pmi);
    if (status != KERN_SUCCESS) { panic ("ArmCpu: CPU %u registration failed: %d", logicalId, status); }
-@@ -513,6 +536,7 @@ bool ArmCpu::finishSecondary (void)
+@@ -513,6 +538,7 @@ bool ArmCpu::finishSecondary (void)
    info.log_id = logicalId;
    info.cluster_id = static_cast<uint32_t> (ml_get_cluster_number (static_cast<uint32_t> (affinity)));
    info.cluster_type = clusterType (static_cast<uint32_t> (affinity));
@@ -54,7 +56,7 @@ index 98b6c3c..aef97ae 100644
    perfmon_interrupt_handler_func pmi = nullptr;
    kern_return_t status = ml_processor_register (&info, &machProcessor, &ipi_handler, &pmi);
    if (status != KERN_SUCCESS) { armcpu_smp_fail[logicalId] = 4; return false; }
-@@ -847,6 +871,129 @@ kern_return_t ArmCpu::startCPU (vm_offset_t, vm_offset_t)
+@@ -847,6 +873,139 @@ kern_return_t ArmCpu::startCPU (vm_offset_t, vm_offset_t)
    return result == 0 ? KERN_SUCCESS : KERN_FAILURE;
  }
  
@@ -151,12 +153,22 @@ index 98b6c3c..aef97ae 100644
 +  }
 +  const uint32_t mode = __atomic_load_n (&gIdleMode, __ATOMIC_RELAXED);
 +  if (mode < 2 || (mode == 2 && !self->secondary)) { return; }
++  s[8] = s[8] + 1;
 +  uint64_t ctl, cval;
 +  __asm__ volatile ("mrs %0, cntv_ctl_el0" : "=r" (ctl));
 +  __asm__ volatile ("mrs %0, cntv_cval_el0" : "=r" (cval));
 +  const uint64_t now = counter ();
 +  // Only with a known wake-up: the kernel's timer armed, unmasked and far enough away.
-+  if ((ctl & 3) != 1 || cval <= now || cval - now < gIdleMinTicks) { return; }
++  if ((ctl & 3) != 1) { s[9] = s[9] + 1; return; }
++  const uint64_t ahead = cval > now ? cval - now : 0;
++  const uint32_t aheadMs = static_cast<uint32_t> (ahead * 1000 / gIdleFreq);
++  if (aheadMs > s[13]) { s[13] = aheadMs; }
++  if (ahead == 0 || ahead < gIdleMinTicks) {
++    const uint64_t us = ahead * 1000000 / gIdleFreq;
++    const unsigned bucket = us < 1000 ? 10 : us < 4000 ? 11 : 12;
++    s[bucket] = s[bucket] + 1;
++    return;
++  }
 +  const bool cluster = mode >= 3 && gIdleClusterOk && cval - now >= gIdleClusterTicks;
 +  save.cval = cval;
 +  save.ctl = ctl;

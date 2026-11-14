@@ -732,7 +732,10 @@ volatile uint32_t *gNwBar;   // the endpoint's registers, for the RAM dump reade
 void rddmScan();
 extern "C" int boot_log_export_put(uint32_t generation, uint32_t total, uint32_t offset, const void *data, uint32_t size) __attribute__((weak_import));
 bool has(const char *s, const char *w) {for (; *s; ++s) {size_t k = 0; while (w[k] && s[k] == w[k]) ++k; if (!w[k]) return true;} return false;}
-bool hasRddm(const char *s) {return has(s, "MHI_CB_EE_RDDM");}
+// The status callback names MHI_CB_EE_RDDM only at debug level (ath12k_debug_mask is 0); the warnings that follow a crash always print:
+// ath12k_core_reset refusing a reset before the firmware was ready (boot 9: the device died while its board data downloaded), and the
+// system error callback.
+bool hasRddm(const char *s) {return has(s, "MHI_CB_EE_RDDM") || has(s, "ignore reset dev flags") || has(s, "firmware crashed");}
 void pLog(int level, const char *line) {
     // one line per channel would push the start-up messages out of the ring
     if (has(line, "chan scan list") || has(line, "mac channel [")) {++gLogRepeats; return;}

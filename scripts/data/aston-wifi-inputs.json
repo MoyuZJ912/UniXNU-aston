@@ -2,7 +2,8 @@
   "linux_firmware": {
     "url": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/ath12k/WCN7850/hw2.0/{name}?h=20261019",
     "tag": "20261019",
-    "note": "The same three files the reference board's firmware/wcn7850/manifest.json pins.",
+    "note": "The same three files the reference board's firmware/wcn7850/manifest.json pins. board_sha256: board-2.bin's board data for this phone's name (make-aston-wifi-object.py BOARD_NAME).",
+    "board_sha256": "d4f92e9f11bc530d7287f346b96ad3f7e56e6ad6c12f2a0977b267a0ee274a6a",
     "files": {
       "amss.bin": {"bytes": 6090816, "sha256": "43aadfd3df887f27de74020273aee484bac6a31dd53068f91baf2a9b094d6a68"},
       "m3.bin": {"bytes": 299660, "sha256": "0e72f44df7defc269fe92dcea25d4d409046c04b77d41c510c52879b3dfc1055"},

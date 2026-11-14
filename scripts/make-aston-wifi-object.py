@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """make-aston-wifi-object.py OUT --linux-firmware DIR --board FILE: the root image object "Wifi" that package/WifiFirmware.c reads.
 
-The WCN7850 hw2.0 firmware is linux-firmware's (ath12k/WCN7850/hw2.0: amss.bin, m3.bin and the regulatory database of board-2.bin),
-the files the reference board runs mainline ath12k with. The board data is this phone's own, /odm/etc/wifi/kiwi/bdwlan.elf (the file
-OnePlus' cnss2 picks for a CN unit, qmi.c cnss_get_oplus_bdf_file_name). It is served as board.bin: ath12k looks a WCN7850 up in
-board-2.bin by bus, PCI IDs, subsystem IDs, chip and board ID (board ID 0xff here), and only when no entry matches takes board.bin.
-The board-2.bin written here therefore holds linux-firmware's regulatory element alone ("bus=pci"), which ath12k requires before the
-board data, and no board entries, so a laptop card's calibration can never be chosen.
+The WCN7850 hw2.0 firmware is linux-firmware's (ath12k/WCN7850/hw2.0: amss.bin, m3.bin, board-2.bin), the files the reference
+board runs mainline ath12k with. ath12k looks a WCN7850 up in board-2.bin by bus, PCI IDs, subsystem IDs, chip and board ID; this
+phone's card reports 17cb:1107, subsystem 17cb:1107, chip 2, board 0xff (read from Android's /sys/bus/pci and the QMI capability
+answer, 2026-11-14), and linux-firmware has an entry under exactly that name. The board-2.bin written here keeps the regulatory
+element ("bus=pci") and that one board element. The phone's own /odm/etc/wifi/kiwi/bdwlan.elf goes in as board.bin, which ath12k
+reads only when board-2.bin has no match: sent to linux-firmware's amss.bin it crashed the firmware (boot 9, MHI system error
+while the board data downloaded).
 Every input is checked against scripts/data/aston-wifi-inputs.json. Nothing here or in OUT may be committed: pack OUT into the unixnu
 image with `unixnu build userdata ... --object Wifi=OUT` (after the existing objects, so their offsets stay).
 
@@ -21,27 +22,41 @@ import struct
 
 ROOT = Path(__file__).resolve().parents[1]
 MAGIC = b'QCA-ATH12K-BOARD'
+IE_BOARD = 0
 IE_REGDB = 1
+BOARD_NAME = 'bus=pci,vendor=17cb,device=1107,subsystem-vendor=17cb,subsystem-device=1107,qmi-chip-id=2,qmi-board-id=255'
 
 
-def board2_regdb_only(data):
-    """linux-firmware board-2.bin with only its regulatory database elements."""
-    if not data.startswith(MAGIC + b'\0'):
-        raise SystemExit('board-2.bin: not an ath12k board file')
-    start = (len(MAGIC) + 1 + 3) & ~3
-    out, at, kept = bytearray(data[:start]), start, 0
+def elements(data, at):
     while at + 8 <= len(data):
         ie, length = struct.unpack_from('<II', data, at)
         end = at + 8 + ((length + 3) & ~3)
         if end > len(data):
             raise SystemExit('board-2.bin: truncated element')
-        if ie == IE_REGDB:
-            out += data[at:end]
-            kept += 1
+        yield ie, data[at + 8:at + 8 + length], data[at:end]
         at = end
-    if kept != 1:
-        raise SystemExit(f'board-2.bin: expected one regulatory element, found {kept}')
-    return bytes(out)
+
+
+def board2_for_phone(data, board_sha256):
+    """linux-firmware board-2.bin with its regulatory element and the one board element named BOARD_NAME."""
+    if not data.startswith(MAGIC + b'\0'):
+        raise SystemExit('board-2.bin: not an ath12k board file')
+    start = (len(MAGIC) + 1 + 3) & ~3
+    regdb, boards = [], []
+    for ie, body, raw in elements(data, start):
+        if ie == IE_REGDB:
+            regdb.append(raw)
+        elif ie == IE_BOARD:
+            names = [sub.decode() for kind, sub, _ in elements(body, 0) if kind == 0]
+            blobs = [sub for kind, sub, _ in elements(body, 0) if kind == 1]
+            if BOARD_NAME in names:
+                boards.append((raw, blobs))
+    if len(regdb) != 1 or len(boards) != 1 or len(boards[0][1]) != 1:
+        raise SystemExit(f'board-2.bin: expected one regulatory element and one board element for {BOARD_NAME}')
+    raw, (blob,) = boards[0]
+    if hashlib.sha256(blob).hexdigest() != board_sha256:
+        raise SystemExit(f'board-2.bin: board data for {BOARD_NAME} is not the pinned one')
+    return data[:start] + regdb[0] + raw
 
 
 def main():
@@ -63,7 +78,8 @@ def main():
     files = [
         ('amss.bin', pinned(args.linux_firmware / 'amss.bin', lf['amss.bin'], 'linux-firmware')),
         ('m3.bin', pinned(args.linux_firmware / 'm3.bin', lf['m3.bin'], 'linux-firmware')),
-        ('board-2.bin', board2_regdb_only(pinned(args.linux_firmware / 'board-2.bin', lf['board-2.bin'], 'linux-firmware'))),
+        ('board-2.bin', board2_for_phone(pinned(args.linux_firmware / 'board-2.bin', lf['board-2.bin'], 'linux-firmware'),
+                                          pins['linux_firmware']['board_sha256'])),
         ('board.bin', pinned(args.board, pins['board'], 'board data')),
     ]
     if not files[3][1].startswith(b'\x7fELF'):
