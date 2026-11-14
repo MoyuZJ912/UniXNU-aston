@@ -229,22 +229,17 @@ jobs:
       - name: Ace 3 menu
         # The payload volume replaces the firmware's menu on this phone: keep "Switch to slot B" as the default.
         # Variants of the same kernel and Data: the BootLog rows of the sys, power, audio ([adsp]) and wifi (qrtr, which the DSP's
-        # battery manager uses) groups, and a one-time rerun of the first-boot data migration (aston-migration-rerun.patch; no staged
-        # apps copy, which the migration refuses as system app upgrades). The GPU path booted iOS on the phone (2026-11-11), so the CPU
-        # display fallback entry is gone. "iOS 402x874" shows iOS a 1206 x 2622 window of the panel (aston-display=1,
-        # aston-display-window.patch), a screen class iOS knows, for comparison. The two deep idle entries let idle cores ask the
-        # hypervisor's PSCI for power-down states (unixnu-patches/ArmCpu: 2 every core but the boot core, CPU state only; 3 every
-        # core and the cluster state); the default entry only reads PSCI (armcpu-idle=1). "iOS display survey" reads once what the
-        # boot chain left running on the display path (aston-dpu=1, AstonDisplaySurvey.cpp: clocks, CTL 0 and the blocks it names,
-        # INTF_1, DSI0 and its PHY; nothing written) for the board's own display driver. The longest line (Rebuild app data) is
-        # about 957 bytes of DarwinBoot's 1024.
+        # battery manager uses) groups; deep idle 3 (unixnu-patches/ArmCpu: every core asks the hypervisor's PSCI for power-down
+        # states, with the cluster state; the default entry only reads PSCI, armcpu-idle=1); the display survey (aston-dpu=1,
+        # AstonDisplaySurvey.cpp: paced reads of what the boot chain left running on the display path, nothing written). The phone's
+        # menu shows about seven entries (2026-11-14: with ten, Install, Switch to slot B and Power off were below the screen), so
+        # deep idle 2 (armcpu-idle=2), the 402x874 window (aston-display=1) and the one-time rerun of the first-boot data migration
+        # (sheng-rerun-migration=1, aston-migration-rerun.patch) are out of the menu; the kernel still takes their arguments.
         run: |
           python3 UniXNU-aston/scripts/aston-payload-menu.py "$WORK/payload/payload.img" \
             --variant "xnu-diag|iOS diag (logs)|log-sys=1 log-power=1 log-audio=1 log-wifi=1" \
-            --variant "xnu-idle2|iOS deep idle 2 (test, logs)|armcpu-idle=2 log-sys=1 log-power=1 log-wifi=1" \
             --variant "xnu-idle3|iOS deep idle 3 (test, logs)|armcpu-idle=3 log-sys=1 log-power=1 log-wifi=1" \
-            --variant "xnu-window|iOS 402x874 (test, logs)|aston-display=1 log-sys=1 log-power=1 log-audio=1 log-wifi=1"             --variant "xnu-dpu|iOS display survey (logs)|aston-dpu=1 log-sys=1 log-power=1 log-wifi=1" \
-            --variant "xnu-migrate|Rebuild app data (slow, once)|sheng-rerun-migration=1 log-sys=1 log-power=1 log-audio=1 log-wifi=1"
+            --variant "xnu-dpu|iOS display survey (logs)|aston-dpu=1 log-sys=1 log-power=1 log-wifi=1"
       - uses: actions/cache/save@v4
         if: always() && steps.data-cache.outputs.cache-hit != 'true' && hashFiles('UniXNU/out/aston/ios-27.0.1-24A446/aston_ios27/runtime/data.dbr') != ''
         with:

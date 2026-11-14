@@ -20,7 +20,8 @@
 #include <mach/mach_time.h>
 #include <pexpert/pexpert.h>
 
-// [0] stage (1 mapped, 2 clocks checked, 3 CTL 0 read, 4 done; negative: the step that stopped it), [1] words kept, [2] segments,
+// [0] stage: 99 mapping, 100 armed (waiting 15 s), 100 + n about to take step n (the steps are paced 3 s apart, so the boot log, written every 2 s,
+// names the step a hang stopped in), 200 done; negative: the check that stopped it. [1] words kept, [2] segments,
 // [3] MDSS GDSCR, [4] MDP clock CBCR, [5] CTL 0 INTF_ACTIVE, [6] FETCH_PIPE_ACTIVE, [7] DSC_ACTIVE, [8] MERGE_3D_ACTIVE, [9] CTL_TOP,
 // [10] INTF_1 frame count, [11] one second later, [12] INTF_1 tear interrupt count, [13] one second later, [14] the sample's microseconds,
 // [15] CTL 0 layer of mixers 0 and 1 (non-zero bits, mixer 0 in bit 0)
@@ -63,34 +64,51 @@ void keep(const Region &r, uint32_t off, uint32_t bytes) {
     aston_dpu_survey[2] = aston_dpu_survey[2] + 1;
 }
 
+// The first try (aston boot 10, all at once) stopped the phone before the boot log's second write: the steps now go from the reads
+// UniXNU-Pagani made safely on the 13T (the GDSC words) toward the MDSS blocks, one group per step.
+void step(int n) {
+    __atomic_store_n(&aston_dpu_survey[0], 100 + n, __ATOMIC_RELEASE);
+    IOSleep(3000);
+}
+void published() {
+    aston_dpu_survey[1] = (int32_t)gUsed;
+    __atomic_store_n(&aston_dpu_dump_words, gUsed, __ATOMIC_RELEASE);
+}
+
 void survey(void *, wait_result_t) {
+    aston_dpu_survey[0] = 99;   // mapping
     IOMemoryMap *mdss = map(kMdss, kMdssBytes), *dsi = map(kDsi, kDsiBytes), *cc = map(kDispCc, kDispCcBytes);
     aston_dpu_dump = static_cast<uint32_t *>(IOMallocData(kCapacity * 4));
     if (!mdss || !dsi || !cc || !aston_dpu_dump) {aston_dpu_survey[0] = -1; return;}
     gMdss = {kMdss, reinterpret_cast<volatile uint32_t *>(mdss->getVirtualAddress())};
     gDsi = {kDsi, reinterpret_cast<volatile uint32_t *>(dsi->getVirtualAddress())};
     gCc = {kDispCc, reinterpret_cast<volatile uint32_t *>(cc->getVirtualAddress())};
-    aston_dpu_survey[0] = 1;
-    // The clock controller first: its PLLs, RCGs and branches, the power domains, the always-on branches.
-    keep(gCc, 0x0000, 0x40); keep(gCc, 0x1000, 0x40); keep(gCc, 0x8000, 0x300); keep(gCc, 0x9000, 0x10); keep(gCc, 0xa000, 0x28);
-    keep(gCc, 0xb000, 0x10); keep(gCc, 0xc000, 0x10); keep(gCc, 0xe000, 0x80);
+    aston_dpu_survey[0] = 100;
+    IOSleep(15000);
+    step(1);   // the two power domains' GDSCR words only
     aston_dpu_survey[3] = (int32_t)rd(gCc, kGdscMdss);
-    aston_dpu_survey[4] = (int32_t)rd(gCc, kCbcrMdp);
+    keep(gCc, 0x9000, 0x4); keep(gCc, 0xb000, 0x4); published();
     if (!(rd(gCc, kGdscMdss) & (1u << 31))) {aston_dpu_survey[0] = -2; return;}   // GDSCR bit 31: PWR_ON
+    step(2);   // the MDP, AHB, pclk0, byte0 and vsync branches
+    aston_dpu_survey[4] = (int32_t)rd(gCc, kCbcrMdp);
+    keep(gCc, kCbcrPclk0, 0x4); keep(gCc, kCbcrMdp, 0x4); keep(gCc, 0x8024, 0x8); keep(gCc, kCbcrAhb, 0x4); published();
     if (!clockOn(kCbcrMdp) || !clockOn(kCbcrAhb) || !clockOn(kCbcrPclk0) || !clockOn(kCbcrByte0)) {aston_dpu_survey[0] = -3; return;}
-    aston_dpu_survey[0] = 2;
-    keep(gMdss, 0x0000, 0x100);           // MDSS top: hardware revision, interrupts
-    keep(gMdss, kMdp, 0x494);             // MDP top
-    keep(gMdss, kCtl0, 0x290);            // CTL 0
+    step(3);   // the rest of the clock controller: PLLs, RCGs and branches, the always-on branches
+    keep(gCc, 0x0000, 0x40); keep(gCc, 0x1000, 0x40); keep(gCc, 0x8000, 0x300); keep(gCc, 0x9000, 0x10); keep(gCc, 0xa000, 0x28);
+    keep(gCc, 0xb000, 0x10); keep(gCc, 0xc000, 0x10); keep(gCc, 0xe000, 0x80); published();
+    step(4); keep(gMdss, 0x0000, 0x100); published();   // MDSS top: hardware revision, interrupts (Android's debugfs window reads it)
+    step(5); keep(gMdss, kMdp, 0x494); published();     // MDP top
+    step(6); keep(gMdss, kCtl0, 0x290); published();    // CTL 0
     const uint32_t intf = rd(gMdss, kCtl0 + 0x0f4), pipes = rd(gMdss, kCtl0 + 0x0fc), dsc = rd(gMdss, kCtl0 + 0x0e8),
                    merge = rd(gMdss, kCtl0 + 0x0e4);
     aston_dpu_survey[5] = (int32_t)intf; aston_dpu_survey[6] = (int32_t)pipes; aston_dpu_survey[7] = (int32_t)dsc;
     aston_dpu_survey[8] = (int32_t)merge; aston_dpu_survey[9] = (int32_t)rd(gMdss, kCtl0 + 0x014);
-    aston_dpu_survey[0] = 3;
     if (!(intf & (1u << 1))) {aston_dpu_survey[0] = -4; return;}   // CTL 0 must drive INTF_1 (BIT(intf - INTF_0))
-    // dpu_hw_ctl.c fetch_tbl: VIG 0..3 are bits 16..19, DMA 0..5 bits 0..5.
+    step(7); keep(gMdss, kIntf1, 0x300); keep(gMdss, kIntf1Tear, 0x10); published();
+    step(8);   // the pipes CTL 0 fetches (dpu_hw_ctl.c fetch_tbl: VIG 0..3 are bits 16..19, DMA 0..5 bits 0..5)
     for (unsigned i = 0; i < 10; ++i) if (pipes & (1u << (i < 4 ? 16 + i : i - 4))) keep(gMdss, kPipe[i], 0x344);
-    // CTL_LAYER(lm): mixers 0..4 at 4 lm, mixer 5 at 0x24; the extensions at 0x40, 0x70, 0xa0 and 0xb8 + 4 lm.
+    published();
+    step(9);   // its mixers (CTL_LAYER(lm): mixers 0..4 at 4 lm, mixer 5 at 0x24; the extensions at 0x40, 0x70, 0xa0 and 0xb8 + 4 lm)
     uint32_t mixers = 0;
     for (unsigned lm = 0; lm < 6; ++lm) {
         const uint32_t layer = lm == 5 ? 0x24 : 4 * lm;
@@ -100,16 +118,17 @@ void survey(void *, wait_result_t) {
     }
     aston_dpu_survey[15] = (int32_t)mixers;
     for (unsigned lm = 0; lm < 6; ++lm) if (mixers & (1u << lm)) keep(gMdss, kMixer[lm], 0x320);
+    published();
+    step(10);   // its DSC encoders and merge blocks
     if (dsc & 3u) {keep(gMdss, kDsc01, 0x10); keep(gMdss, kDsc01 + 0x100, 0x9c); keep(gMdss, kDsc01 + 0x200, 0x9c);
                    keep(gMdss, kDsc01 + 0xf00, 0x24); keep(gMdss, kDsc01 + 0xf80, 0x24);}
     if (dsc & 0xcu) {keep(gMdss, kDsc23, 0x10); keep(gMdss, kDsc23 + 0x100, 0x9c); keep(gMdss, kDsc23 + 0x200, 0x9c);
                      keep(gMdss, kDsc23 + 0xf00, 0x24); keep(gMdss, kDsc23 + 0xf80, 0x24);}
     for (unsigned m = 0; m < 4; ++m) if (merge & (1u << m)) keep(gMdss, kMerge3d[m], 0x8);
-    keep(gMdss, kIntf1, 0x300);
-    keep(gMdss, kIntf1Tear, 0x10);
-    keep(gDsi, 0x0000, 0x400);            // DSI0 controller
-    keep(gDsi, 0x1000, 0xa00);            // DSI0 PHY, its PLL at +0x500
-    // The refresh the boot loader runs: INTF_1 frames and tear interrupts over one second.
+    published();
+    step(11); keep(gDsi, 0x0000, 0x400); published();   // DSI0 controller
+    step(12); keep(gDsi, 0x1000, 0xa00); published();   // DSI0 PHY, its PLL at +0x500
+    step(13);   // the refresh the boot loader runs: INTF_1 frames and tear interrupts over one second
     const uint64_t t0 = mach_absolute_time();
     aston_dpu_survey[10] = (int32_t)rd(gMdss, kIntf1 + 0x0ac);
     aston_dpu_survey[12] = (int32_t)rd(gMdss, kIntf1 + 0x298);
@@ -119,9 +138,7 @@ void survey(void *, wait_result_t) {
     uint64_t ns = 0;
     absolutetime_to_nanoseconds(mach_absolute_time() - t0, &ns);
     aston_dpu_survey[14] = (int32_t)(ns / 1000);
-    aston_dpu_survey[1] = (int32_t)gUsed;
-    __atomic_store_n(&aston_dpu_dump_words, gUsed, __ATOMIC_RELEASE);
-    aston_dpu_survey[0] = 4;
+    aston_dpu_survey[0] = 200;
 }
 }  // namespace
 

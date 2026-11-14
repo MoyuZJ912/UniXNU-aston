@@ -1051,7 +1051,9 @@ static bool hostBringUp (const char **why)
     smmuBypassStream (0x1401, extraMap, extraReport, 0x9c900000ULL, 8ULL << 20);
     // The endpoint only produces 32-bit addresses and the memory here is above 4 GiB: give its context bank a stage 1 table (4 KiB granule,
     // 32-bit input, L1 -> L2 with 2 MiB blocks) that maps kExtraIova upward onto one contiguous buffer. Own bank only: refused when it is the storage's.
-    constexpr uint32_t kExtraIova = 0x10000000U, kExtraBlocks = 24, kBlock = 2U << 20;
+    // aston boot 11: with firmware ready the WCN7850's target memory (about 22 MiB in seven segments) and the rings peaked at 49.9 MB of
+    // 48 MiB, and the REO destination ring's 68 KiB found 60 KiB at most (-ENOMEM, core start failed): 32 blocks, 64 MiB.
+    constexpr uint32_t kExtraIova = 0x10000000U, kExtraBlocks = 32, kBlock = 2U << 20;
     IOBufferMemoryDescriptor *buffer = IOBufferMemoryDescriptor::inTaskWithOptions (
       kernel_task, static_cast<IOOptionBits> (kIODirectionInOut) | static_cast<IOOptionBits> (kIOMemoryPhysicallyContiguous) |
       static_cast<IOOptionBits> (kIOMemoryMapperNone) , (kExtraBlocks + 1) * kBlock, kBlock);
