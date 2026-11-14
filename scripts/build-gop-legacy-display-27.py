@@ -515,7 +515,7 @@ board_objects = []
 # The boot screen draws text with Mu-Silicium's Font.h (the panic screen's font), from the firmware tree UNIXNU_UEFI names.
 FONT = Path(os.environ.get('UNIXNU_UEFI') or ROOT / 'uefi-sheng') / 'Silicon/Silicium/SiliciumPkg/Library/FrameBufferSerialPortLib'
 require((FONT / 'Font.h').exists(), 'Mu-Silicium FrameBufferSerialPortLib/Font.h (UNIXNU_UEFI)')
-for stem, extra in [('AstonBootScreen', ('-I', str(FONT))), ('AstonDisplayWindow', ()), ('AstonStorageTraits', ()), ('AstonPanel', ()), ('CpuFreqProbe', ())] +                    ([('WifiProbe', ('-I', str(WIFI / 'include')))] if WITH_WIFI else []) + [
+for stem, extra in [('AstonBootScreen', ('-I', str(FONT))), ('AstonDisplayWindow', ()), ('AstonStorageTraits', ()), ('AstonPanel', ()), ('AstonDisplaySurvey', ()), ('CpuFreqProbe', ())] +                    ([('WifiProbe', ('-I', str(WIFI / 'include')))] if WITH_WIFI else []) + [
                     ('BluetoothProbe', ('-I', str(BLUETOOTH / 'include'), '-I', str(ROOT / 'kits/Sm8550Platform'))),
                     ('AdspProbe', ()), ('AudioProbe', ()),
                     ('BacklightProbe', ()), ('DisplayTimingProbe', ()), ('BatteryProbe', ()),

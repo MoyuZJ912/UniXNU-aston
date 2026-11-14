@@ -100,6 +100,10 @@ extern volatile int32_t aston_wifi_object_stats[5] __attribute__((weak_import));
 // ArmCpu's deep idle (unixnu-patches/ArmCpu/0001-psci-cpu-suspend-idle.patch, armcpu-idle).
 extern volatile int32_t armcpu_idle_info[4] __attribute__((weak_import));
 extern volatile uint32_t armcpu_idle_stats[8][16] __attribute__((weak_import));
+// The display path survey (AstonDisplaySurvey.cpp, aston-dpu=1).
+extern volatile int32_t aston_dpu_survey[16] __attribute__((weak_import));
+extern uint32_t *aston_dpu_dump __attribute__((weak_import));
+extern volatile uint32_t aston_dpu_dump_words __attribute__((weak_import));
 extern volatile int native_staged_union_stage __attribute__((weak_import));
 extern volatile int native_staged_union_status __attribute__((weak_import));
 extern volatile int native_gpu_addon5_status __attribute__((weak_import));
@@ -542,6 +546,34 @@ static size_t compose(char *out, size_t cap, uint32_t slot, unsigned now) {
                     s[6], s[8], s[9], s[10], s[11], s[12], s[13]);
     }
     at = put(out, at, cap, row, sizeof row);
+  }
+  // The display path survey (AstonDisplaySurvey.cpp): stage, words kept, segments, MDSS GDSCR, MDP clock CBCR, CTL 0 INTF/FETCH_PIPE/DSC/
+  // MERGE_3D active, CTL_TOP, its mixers; INTF_1 frame and tear interrupt counts over the microseconds of one sample. Then the kept
+  // registers, 96 rows of eight words per slot until all are out (rows of zeros left out): "[dpu-dump] <physical address> <words>".
+  if (&aston_dpu_survey && aston_dpu_survey[0]) {
+    char row[240];
+    snprintf(row, sizeof row, "[dpu] st=%d words=%d segs=%d gdsc=%x mdp=%x intf=%x pipes=%x dsc=%x m3d=%x top=%x lm=%x fc=%d/%d te=%d/%d us=%d",
+             aston_dpu_survey[0], aston_dpu_survey[1], aston_dpu_survey[2], aston_dpu_survey[3], aston_dpu_survey[4], aston_dpu_survey[5],
+             aston_dpu_survey[6], aston_dpu_survey[7], aston_dpu_survey[8], aston_dpu_survey[9], aston_dpu_survey[15], aston_dpu_survey[10],
+             aston_dpu_survey[11], aston_dpu_survey[12], aston_dpu_survey[13], aston_dpu_survey[14]);
+    at = put(out, at, cap, row, sizeof row);
+    static uint32_t dump_at, dump_in;   // the segment header being shown, words of it already shown
+    const uint32_t total = &aston_dpu_dump_words ? __atomic_load_n(&aston_dpu_dump_words, __ATOMIC_ACQUIRE) : 0;
+    const uint32_t *d = &aston_dpu_dump ? aston_dpu_dump : NULL;
+    for (unsigned rows = 0; d && total && dump_at + 2 <= total && rows < 96;) {
+      const uint32_t base = d[dump_at], count = d[dump_at + 1];
+      if (dump_in >= count || dump_at + 2 + count > total) {dump_at += 2 + count; dump_in = 0; continue;}
+      const uint32_t n = count - dump_in < 8 ? count - dump_in : 8, *w = d + dump_at + 2 + dump_in;
+      uint32_t any = 0;
+      for (uint32_t k = 0; k < n; ++k) any |= w[k];
+      if (any) {
+        int len = snprintf(row, sizeof row, "[dpu-dump] %08x", base + 4 * dump_in);
+        for (uint32_t k = 0; k < n && len > 0 && len < (int)sizeof row; ++k) len += snprintf(row + len, sizeof row - (size_t)len, " %08x", w[k]);
+        at = put(out, at, cap, row, sizeof row);
+        ++rows;
+      }
+      dump_in += n;
+    }
   }
   // The payload's GPU addon (kern_exec.c native_gpu_addon_install): files in it (-1 none), written, already equal, failed, last error; then
   // the stage/status of the boot-time addon mounts (stage 5 = mounted and both entries visible): plugin, launchd job, wallpaper, audio, wallpaper floating layer

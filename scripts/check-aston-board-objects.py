@@ -13,7 +13,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-CPP = ['TouchProbe', 'ButtonProbe', 'BatteryProbe', 'ShengBattery', 'AstonDisplayWindow', 'AstonStorageTraits', 'AstonPanel', 'AppleARMBacklight', 'BacklightProbe', 'CpuFreqProbe']
+CPP = ['TouchProbe', 'ButtonProbe', 'BatteryProbe', 'ShengBattery', 'AstonDisplayWindow', 'AstonStorageTraits', 'AstonPanel', 'AstonDisplaySurvey', 'AppleARMBacklight', 'BacklightProbe', 'CpuFreqProbe']
 C = ['S3910', 'AstonGaugeBus', 'AstonGauge', 'BootLog', 'AstonHaltRestart', 'AstonSocBackup']
 # With BSD flags, as build-sheng-source-storage.py compiles them (the VFS readers).
 BSD = ['WifiFirmware']

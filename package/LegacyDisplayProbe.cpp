@@ -513,6 +513,7 @@ extern "C" void aston_boot_screen_probe(void);
 extern "C" void aston_halt_restart_install(void);
 extern "C" void aston_display_window_probe(void);
 extern "C" void aston_storage_traits_install(void);
+extern "C" void aston_dpu_survey_probe(void);
 void native_legacy_display_late_probe(void) {
     aston_display_window_probe();  // aston-display=1: black panel borders around iOS's window (AstonDisplayWindow.cpp)
     aston_boot_screen_probe();  // first: the boot screen takes the framebuffer until iOS draws (AstonBootScreen.cpp)
@@ -531,6 +532,7 @@ void native_legacy_display_late_probe(void) {
     sheng_buttons_probe();
     sheng_backlight_probe();
     sheng_dpu_probe();
+    aston_dpu_survey_probe();  // aston-dpu=1: what the boot chain left running on the display path, read once (AstonDisplaySurvey.cpp)
     native_hid_input_probe();
     IOService *display=pendingLegacyDisplay;if(!display)return;pendingLegacyDisplay=nullptr;
     native_legacy_surface_status=OSKextLoadKextWithIdentifier("com.apple.iokit.IOSurface");
